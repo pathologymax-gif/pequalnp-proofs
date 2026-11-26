@@ -15,7 +15,7 @@ jobs:
     timeout-minutes: 70
     env:
       PROOF: lean/PEqualNP/Outside/L_gct_234.lean
-      EXPECTED_SOURCE: b2da64d8d84c6a9fdcdd9a18a40aae43f53128ca1151cfffc950f6353b730cd2
+      EXPECTED_SOURCE: 0af96a532ba6275f12543fd3f53c02e28722f3f735647fcefe0f42386d1a6fa0
       EXPECTED_STATEMENT: d5694f032963d43413315562a8d917094d74e35df63cfe250710fadc9bd29064
     steps:
       - name: Fetch the precise upstream project
@@ -28,7 +28,7 @@ jobs:
       - name: Fetch the exact candidate revision
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
         with:
-          ref: d31f9a3fbb7385083b083216479d19c41cc73588
+          ref: 22624dd31802fb2567a47b74359220e597c350fa
           path: candidate
           sparse-checkout: lean/PEqualNP/Outside/L_gct_234.lean
           sparse-checkout-cone-mode: false
@@ -39,7 +39,7 @@ jobs:
         run: |
           set -euo pipefail
           printf '%s  %s\n' "$EXPECTED_SOURCE" "candidate/$PROOF" | sha256sum -c -
-          test "$(wc -c < "candidate/$PROOF")" -eq 514616
+          test "$(wc -c < "candidate/$PROOF")" -eq 523821
           mkdir -p "upstream/$(dirname "$PROOF")"
           cp "candidate/$PROOF" "upstream/$PROOF"
           printf '%s' "$ASSIGNED_STATEMENT" > "$RUNNER_TEMP/candidate-statement.txt"
