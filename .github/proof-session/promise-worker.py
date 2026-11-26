@@ -45,6 +45,10 @@ class Stop(Exception):
     """Controlled message with no private data."""
 
 
+class NormalSessionEnd(Stop):
+    """No remaining work in this bounded, healthy session."""
+
+
 class LeaseLost(Stop):
     pass
 
@@ -467,7 +471,7 @@ def await_target():
             print("Checking immutable designated candidate", step, commit)
             return
         sleep(12)
-    raise Stop("No approved candidate arrived within the prewarm window.")
+    raise NormalSessionEnd("No approved candidate arrived within the prewarm window. No lease was requested.")
 
 def acquire():
     pinned = git("rev-parse", "HEAD").decode().strip()
@@ -547,6 +551,7 @@ def build():
 
     tested = None
     attempts = 0
+    candidate_tested = False
     while monotonic() < deadline:
         beat()
         commit = head(step)
@@ -557,6 +562,7 @@ def build():
             main = require_open(path)
             proof = candidate(step, path, commit, main, gap["upstream"])
             if proof:
+                candidate_tested = True
                 Path(path).write_bytes(proof)
                 poll = watch_revision(step, commit, beat)
                 try:
@@ -588,7 +594,9 @@ def build():
                     print("Candidate revision changed. Stopped the superseded checker; continuing this assignment.")
                     continue
         sleep(min(POLL_SECONDS, max(0, deadline - monotonic())))
-    raise Stop("Assignment window expired.")
+    if candidate_tested:
+        raise Stop("Submitted candidate failed to validate before the assignment window ended.")
+    raise NormalSessionEnd("Assignment window ended without a complete candidate.")
 
 
 def confirm():
@@ -630,7 +638,7 @@ def confirm():
             print("SUBMIT READY " + timestamp() + " " + commit)
             next_ready = monotonic() + 60
         sleep(min(25, max(0, deadline - monotonic())))
-    raise Stop("Assignment window expired.")
+    raise NormalSessionEnd("Submission window ended without a matching pull request.")
 
 
 def close(reason, final=False):
@@ -684,13 +692,15 @@ if __name__ == "__main__":
     signal.signal(signal.SIGTERM, interrupted)
     try:
         main()
+    except NormalSessionEnd as exc:
+        print(str(exc))
     except StepClosed as exc:
         private = temp_file("proof-session-private.json")
         if private.exists():
             state = json.loads(private.read_text())
             state["release_reason"] = "other"
             private.write_text(json.dumps(state), encoding="utf-8")
-        raise SystemExit(str(exc)) from None
+        print("The desk closed the step.", str(exc))
     except LeaseLost as exc:
         # End this phase immediately. The unconditional cleanup step can still
         # release this particular lease on a transient outage and erase it.
