@@ -5,6 +5,7 @@ on:
     branches: [research/meta-2063]
     paths:
       - 'research/meta-2063/verify_*.py'
+      - 'research/meta-2063/shared_disjunction_certificates.json'
       - 'research/meta-2063/polarity_bounds.py'
       - 'research/meta-2063/quadrangle_faces.py'
       - '.github/workflows/check-meta-2063-research.yml'
@@ -16,7 +17,7 @@ jobs:
   verify:
     if: github.repository == 'pathologymax-gif/pequalnp-proofs' && github.actor == 'pathologymax-gif'
     runs-on: ubuntu-24.04
-    timeout-minutes: 5
+    timeout-minutes: 8
     steps:
       - name: Check out the submitted revision
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
@@ -28,7 +29,7 @@ jobs:
         run: python3 research/meta-2063/verify_two_stars.py
       - name: Check all three-collinear-star replacements
         run: python3 research/meta-2063/verify_three_stars.py
-      - name: Check the sole shared raw gate
-        run: python3 research/meta-2063/verify_raw_shared_gate.py
+      - name: Check every sole shared pure disjunction
+        run: python3 research/meta-2063/verify_shared_disjunctions.py
       - name: Check the unrestricted counts of AND and OR gates
         run: python3 research/meta-2063/polarity_bounds.py
