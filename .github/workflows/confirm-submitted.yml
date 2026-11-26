@@ -1,0 +1,50 @@
+name: Confirm and release the owner's submitted proof
+on:
+  push:
+    branches: [promise44-validation]
+    paths: ['.github/proof-session/submitted.json']
+permissions:
+  contents: read
+jobs:
+  confirm-submitted:
+    if: github.repository == 'pathologymax-gif/pequalnp-proofs' && github.actor == 'pathologymax-gif'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 3
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          persist-credentials: false
+          sparse-checkout: .github/proof-session/submitted.json
+          sparse-checkout-cone-mode: false
+      - name: Confirm the actual user-authored PR and finalize its lease
+        run: |
+          python3 -I - <<'PY'
+          import json, re, time
+          from urllib.error import HTTPError
+          from urllib.parse import urlencode
+          from urllib.request import Request, urlopen, build_opener, HTTPRedirectHandler
+          owner="pathologymax-gif"
+          target=json.load(open(".github/proof-session/submitted.json",encoding="utf-8"))
+          number,step,commit=target["pr"],target["step"],target["commit"]
+          assert isinstance(number,int) and 1<=number<1000000
+          assert re.fullmatch("L-[a-z]+-[0-9]+",step)
+          assert re.fullmatch("[0-9a-f]{40}",commit)
+          pr=json.load(urlopen("https://api.github.com/repos/open-goat/pequalnp-proofs/pulls/"+str(number),timeout=15))
+          assert pr["user"]["login"]==owner and pr["title"]==step and pr["base"]["ref"]=="main"
+          assert pr["head"]["repo"]["full_name"]==owner+"/pequalnp-proofs" and pr["head"]["sha"]==commit
+          assert pr["head"]["ref"]==step and (pr["state"]=="open" or pr["merged_at"])
+          leases=re.findall(r"^Lease: ([A-Za-z0-9-]{1,64})\s*$",pr["body"] or "",re.M)
+          assert len(leases)==1
+          class NoRedirect(HTTPRedirectHandler):
+              def redirect_request(self, req, fp, code, msg, headers, newurl): return None
+          endpoint="https://pequalnp.com/desk/release?"+urlencode({"lease":leases[0],"reason":"submitted"})
+          try:
+              with build_opener(NoRedirect()).open(Request(endpoint,method="POST"),timeout=15) as r:
+                  status=r.status
+          except HTTPError as exc:
+              status=exc.code
+          except OSError:
+              raise SystemExit("Network error during release; no receipt has been printed.")
+          print("Confirmed PR",number,"on",step,"at",commit,". Desk release submitted, HTTP",status)
+          if status not in (200,410): raise SystemExit(1)
+          PY
