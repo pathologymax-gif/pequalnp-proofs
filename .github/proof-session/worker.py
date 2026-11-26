@@ -161,27 +161,15 @@ def empty_queue(data):
                           message, re.I))
 
 
-def assign(evidence=None):
-    choices = (False,) if evidence else (False, True, False)
-    for attempt, hard in enumerate(choices, start=1):
+def assign():
+    choices = ("warmup", "solid")
+    for attempt, level in enumerate(choices, start=1):
         if CUTOFF - time() < MIN_NEW_SESSION + 60:
             raise Stop("Weekly cutoff is too close for a new assignment.")
         current_main()
-        params = {"handle": OWNER, "value": "1"}
-        if evidence:
-            if head(evidence["id"]) != evidence["commit"]:
-                raise Stop("The independently checked revision changed before assignment.")
-            row = public_row(evidence["id"])
-            if descriptor(row) != evidence["descriptor"]:
-                raise Stop("The desk statement changed after the independent check. No lease requested.")
-            require_open(row["file"], row["id"], need_known=True)
-            params.update(gap=evidence["id"], have="proof")
-        else:
-            params["kind"] = "prove"
-        if hard and not evidence:
-            params["hard"] = "1"
-        print(f"Assignment request {attempt}/{len(choices)}, "
-              + ("verified existing proof." if evidence else "hard." if hard else "all levels."))
+        params = {"handle": OWNER, "value": "1", "another": "1",
+                  "level": level, "kind": "prove"}
+        print(f"Second assignment request {attempt}/{len(choices)}: {level}, prove.")
         status, data = request(DESK + "next", params)
         if status != 200 or not isinstance(data, dict) or "gap" not in data:
             raise Stop(f"Assignment unavailable (HTTP {status}).")
@@ -190,7 +178,11 @@ def assign(evidence=None):
             lease_id = lease.get("id") if isinstance(lease, dict) else None
             if not isinstance(lease_id, str) or not re.fullmatch(r"[A-Za-z0-9-]{1,64}", lease_id):
                 raise Stop("The desk supplied no usable lease identifier.")
-            return lease_id, data["gap"]
+            gap = data["gap"]
+            if isinstance(gap, dict) and gap.get("id") == "L-meta-17121":
+                raise Stop("Desk returned the primary session's assignment. Leaving that session untouched.")
+            terms = lease.get("terms") or {}
+            return lease_id, gap, terms, level
         if not empty_queue(data):
             print("Desk returned a restriction or unfamiliar status. No further requests.")
             return None
@@ -387,68 +379,12 @@ def watch_revision(step, commit, beat):
     return poll
 
 
-def proof_of_evidence(pinned):
-    step = os.environ.get("PNP_CHECKED_STEP", "")
-    commit = os.environ.get("PNP_CHECKED_COMMIT", "")
-    if not step and not commit:
-        return None
-    if not re.fullmatch(r"L-[a-z]+-[0-9]+", step) or not re.fullmatch(r"[0-9a-f]{40}", commit):
-        raise Stop("Targeted work needs both a step and an immutable previously checked revision.")
-    gap = public_row(step)
-    guard_statement(gap)
-    found, path = describe(gap)
-    if found != step or head(step) != commit or Path(path).exists():
-        raise Stop("Targeted evidence does not match the available step and branch.")
-    proof = candidate(step, path, commit, require_open(path, step), pinned)
-    if not proof:
-        raise Stop("The named revision does not contain exactly the assigned file.")
-    next_stop = 0
-
-    def check_stop():
-        nonlocal next_stop
-        if monotonic() >= next_stop:
-            require_open(path, step)
-            next_stop = monotonic() + 210
-
-    deadline = monotonic() + min(50 * 60, max(0, CUTOFF - time() - 60))
-    with tempfile.TemporaryDirectory(dir=os.environ["RUNNER_TEMP"]) as directory:
-        if not guarded_candidate(proof, path, gap, directory):
-            raise Stop("The official file guard refused the preexisting bytes. No lease requested.")
-        statement = Path(directory, "statement.txt")
-        statement.write_text(gap["statement"], encoding="utf-8")
-        try:
-            Path(path).write_bytes(proof)
-            accepted = check_command(["node", "tools/check-lean.mjs", path, str(statement), "check"],
-                                     ".", deadline, watch_revision(step, commit, check_stop), expect_accept=True)
-            if not accepted or Path(path).read_bytes() != proof or head(step) != commit:
-                raise Stop("The independent byte-exact checker did not certify this revision. No lease requested.")
-        except CandidateChanged:
-            raise Stop("The supplied candidate moved during independent verification. No lease requested.") from None
-        finally:
-            Path(path).unlink(missing_ok=True)
-    return dict(id=step, commit=commit, descriptor=descriptor(gap))
-
-
-def descriptor(gap):
-    return (gap.get("id"), gap.get("file"), gap.get("module"), gap.get("statement"), gap.get("imports") or [])
-
-
-def public_row(step):
-    status, data = request(DESK + "row", {"gap": step})
-    gaps = data.get("gaps") if isinstance(data, dict) else None
-    matches = [g for g in gaps if isinstance(g, dict) and g.get("id") == step] if isinstance(gaps, list) else []
-    if status != 200 or len(matches) != 1:
-        raise Stop("The public desk did not return exactly one matching row. No lease requested.")
-    return matches[0]
-
-
 def acquire():
     pinned = git("rev-parse", "HEAD").decode().strip()
-    evidence = proof_of_evidence(pinned)
-    assignment = assign(evidence)
+    assignment = assign()
     if assignment is None:
         return
-    lease, gap = assignment
+    lease, gap, terms, requested_level = assignment
     # Only this runner can read this file. No GitHub artifact includes it.
     state = {"lease": lease, "deadline": min(time() + SESSION_SECONDS, CUTOFF - 60),
              "release_reason": "other"}
@@ -459,8 +395,10 @@ def acquire():
         raise Stop("Desk metadata unexpectedly contains private lease data.")
     if not isinstance(gap, dict):
         raise Stop("Invalid assignment type.")
-    if evidence and descriptor(gap) != evidence["descriptor"]:
-        raise Stop("The issued row differs from the independently checked row. Returning it.")
+    if not isinstance(terms, dict) or terms.get("level", requested_level) != requested_level or terms.get("kind", "prove") not in ("prove", "check"):
+        raise Stop("The issued lease terms differ from the requested level or kind. Returning it.")
+    if gap.get("level", requested_level) != requested_level:
+        raise Stop("The returned row differs from the requested level. Returning it.")
     guard_statement(gap)
     step, path = describe(gap)
     if git("ls-tree", pinned, "--", path):
@@ -470,6 +408,10 @@ def acquire():
     private.write_text(json.dumps(state), encoding="utf-8")
     public = {key: gap[key] for key in ("id", "file", "module", "statement")}
     public.update(imports=gap.get("imports") or [], upstream=pinned)
+    public.update(level=requested_level, kind="prove")
+    if type(terms.get("points")) is int:
+        public["points"] = terms["points"]
+    print("Assignment level " + requested_level + ", kind prove.")
     temp_file(ARTIFACT_ASSIGN).write_text(json.dumps(public, ensure_ascii=False, indent=2), encoding="utf-8")
     (Path(".pnp")).mkdir(exist_ok=True)
     Path(".pnp", step + ".json").write_text(json.dumps({"gap": public}), encoding="utf-8")
@@ -640,7 +582,7 @@ def cleanup():
 def main():
     if (os.environ.get("GITHUB_REPOSITORY") != FORK
             or os.environ.get("GITHUB_ACTOR") != OWNER
-            or os.environ.get("GITHUB_REF") != "refs/heads/proof-research-session"):
+            or os.environ.get("GITHUB_REF") != "refs/heads/proof-research-second"):
         raise Stop("This job runs only on its owner's designated fork and branch.")
     if len(sys.argv) != 2 or sys.argv[1] not in ("acquire", "build", "confirm", "cleanup"):
         raise Stop("Unknown workflow phase.")
