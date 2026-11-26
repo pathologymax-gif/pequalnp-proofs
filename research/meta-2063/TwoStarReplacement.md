@@ -8,13 +8,27 @@ Let the chosen points be $p,q$, with common line $c$. Each center has three priv
 
 On the eight positive rows belonging to the selected stars, every OR wire from an untouched star has the same value as its OR after deleting irrelevant lines. Removing those lines can only lower the wire's value on a negative input. An outside point lies on just one line through each of the two centers. Hence every resulting OR is either zero or one of the eighteen supplied signals. The other point inputs, the eleven complete stars and all ORs of their outputs are zero on the selected positives. They too may be replaced by zero. In a monotone circuit, these replacements keep every required positive and preserve rejection of every negative. All zero constants can then be simplified away.
 
-## Distinct inputs bound the amount of sharing
+## Geometry forces the raw inputs
 
-A proposed circuit must refer to at least nine of the eighteen signals on paths to the output. To check a set of available signals, project the eight positive rows and all negative rows onto its coordinates. If any projected positive is contained in a projected negative, monotonicity prevents separation. Each individual omission of $p,q,c$ fails this test even with all other signals available. Among sets retaining those three, all $\binom{15}{5}=3003$ choices of five more signals fail as well. This also excludes every smaller source set.
+Three nonconcurrent lines form a triangle. Their union has nine points, so its complement has four. Every other line meets the triangle's sides in at least two distinct points, as a line through two triangle vertices is itself a side. The four complementary points thus form a quadrangle whose exterior lines are exactly the triangle's sides. Given a point outside two lines, a third line through neither the point nor the intersection of those two lines completes such a triangle while keeping the point in the quadrangle. The third line exists since two point-pencils together contain only seven of the thirteen lines.
 
-If a connected output circuit has $s$ distinct reachable input signals and $g$ reachable nonconstant binary gates, the underlying undirected graph has at least $s+g-1$ edges. Its gates supply at most $2g$ incoming wire occurrences. Thus $s\le g+1$. At $g\le8$, the previous paragraph forces equality, so every nonoutput vertex has exactly one outgoing occurrence. Such a circuit is a formula.
+Signals $p,q,c$ must all reach the output. Without $p$, the positive row $(p,c)$ sets only $c$ among the eighteen signals, and some negative has $c$ as an exterior line. The same argument applies to $q$. Without $c$, the positive row $(p,c)$ sets only $p$, which occurs in a negative.
 
-## Exhaustion of the formulas
+Suppose a private line $a$ through $p$ is absent as a direct source. All three signals $a\lor b$, with $b$ a private line through $q$, must then be used. If at most two were used, choose two such private lines $b_1,b_2$ covering the selected choices. Both miss $p$. Complete them to a triangle missing $p$ as above. The resulting quadrangle contains $p$ and has both $b_1,b_2$ as exterior lines. On every used source, the positive row $(p,a)$ is therefore bounded above by this negative, contrary to monotonicity. The same argument applies with the centers exchanged.
+
+Let $x,y$ count the absent direct private lines on the two sides. We must use the $6-x-y$ remaining direct private lines and at least $3x+3y-xy$ distinct pair signals incident with a missing line. Their total is $6+2x+2y-xy$. For $0\le x,y\le3$, it exceeds six whenever $x+y>0$. Indeed, when $x\le2$ its excess is $2x+(2-x)y$; when $x=3$ the excess is $6-y$. Including $p,q,c$, any circuit using at most nine sources must therefore use exactly the nine raw inputs.
+
+## Eight gates would give a read-once formula
+
+If a connected output circuit has $s$ distinct reachable input signals and $g$ reachable nonconstant binary gates, each nonoutput vertex supplies at least one outgoing wire occurrence. There are at most $2g$ input occurrences at gates, so $s+g-1\le2g$. At $g\le8$ the nine necessary sources force equality. Every nonoutput vertex then has one outgoing occurrence, giving a formula in which each of the nine raw variables appears once.
+
+For a monotone read-once formula that rejects each singleton and contains no constants, its accepted pairs of distinct variables form a disjoint union of complete bipartite graphs and isolated vertices. At a root OR, both children reject singletons and their variable sets are disjoint, so their accepted-pair graphs form a disjoint union. At a root AND, each child rejects the empty input. A true pair must therefore have one variable on each side, and it is accepted exactly when both individual variables are accepted by their respective child. This gives one complete bipartite graph. These cases prove the claim inductively.
+
+Here every raw singleton is contained in a negative input. The graph must contain $(p,a),(p,c),(q,c)$ for every private $a$ through $p$. It cannot contain $(q,a)$, since a triangle with side $a$ avoiding $q$ has a complementary quadrangle containing $q$. In a disjoint union of complete bipartite graphs, the common neighbor $c$ puts $p$ and $q$ in the same part of the same component; they must have identical neighbors. This contradiction proves the nine-gate lower bound.
+
+## Independent finite verification
+
+For a separate computational proof, the verifier excludes all $\binom{15}{5}=3003$ selections of five additional sources alongside $p,q,c$ by testing whether a projected positive row is contained in a projected negative.
 
 Label each signal by the vector of its values on the eight positives and the inclusion-maximal projected negatives. Removing contained negative rows preserves rejection by monotonicity. There are 34 maximal negative rows for each pair of centers. Applying AND or OR to two vectors evaluates the corresponding gate on all 42 rows at once.
 
