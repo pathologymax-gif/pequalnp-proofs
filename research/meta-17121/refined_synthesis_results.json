@@ -1,0 +1,224 @@
+{
+  "minimum_networks": [
+    {
+      "case": 0,
+      "gates": 18,
+      "solver": "cadical195",
+      "conflict_budget": 25000,
+      "status": "UNKNOWN",
+      "clauses": 90398,
+      "variables": 14829,
+      "seconds": 2.344,
+      "stats": {
+        "restarts": 1723,
+        "conflicts": 25001,
+        "decisions": 133435,
+        "propagations": 17947121
+      },
+      "fixed_star": false,
+      "separations": false
+    },
+    {
+      "case": 1,
+      "gates": 18,
+      "solver": "cadical195",
+      "conflict_budget": 25000,
+      "status": "UNKNOWN",
+      "clauses": 85933,
+      "variables": 13717,
+      "seconds": 2.032,
+      "stats": {
+        "restarts": 1485,
+        "conflicts": 25000,
+        "decisions": 134267,
+        "propagations": 16460206
+      },
+      "fixed_star": false,
+      "separations": false
+    },
+    {
+      "case": 2,
+      "gates": 18,
+      "solver": "cadical195",
+      "conflict_budget": 25000,
+      "status": "UNKNOWN",
+      "clauses": 88917,
+      "variables": 14390,
+      "seconds": 1.984,
+      "stats": {
+        "restarts": 1385,
+        "conflicts": 25002,
+        "decisions": 127139,
+        "propagations": 14649292
+      },
+      "fixed_star": false,
+      "separations": false
+    },
+    {
+      "case": 3,
+      "gates": 18,
+      "solver": "cadical195",
+      "conflict_budget": 25000,
+      "status": "UNKNOWN",
+      "clauses": 83030,
+      "variables": 13071,
+      "seconds": 1.891,
+      "stats": {
+        "restarts": 1716,
+        "conflicts": 25002,
+        "decisions": 135760,
+        "propagations": 14055699
+      },
+      "fixed_star": false,
+      "separations": false
+    }
+  ],
+  "three_test_networks": [
+    {
+      "case": 0,
+      "gates": 18,
+      "solver": "cadical195",
+      "conflict_budget": 200000,
+      "status": "UNKNOWN",
+      "clauses": 244843,
+      "variables": 65715,
+      "seconds": 69.406,
+      "stats": {
+        "restarts": 10209,
+        "conflicts": 200001,
+        "decisions": 936606,
+        "propagations": 626735788
+      },
+      "fixed_star": false,
+      "separations": true
+    },
+    {
+      "case": 1,
+      "gates": 18,
+      "solver": "cadical195",
+      "conflict_budget": 200000,
+      "status": "UNKNOWN",
+      "clauses": 223572,
+      "variables": 59059,
+      "seconds": 59.906,
+      "stats": {
+        "restarts": 10670,
+        "conflicts": 200000,
+        "decisions": 940141,
+        "propagations": 579957620
+      },
+      "fixed_star": false,
+      "separations": true
+    },
+    {
+      "case": 2,
+      "gates": 18,
+      "solver": "cadical195",
+      "conflict_budget": 200000,
+      "status": "UNKNOWN",
+      "clauses": 235565,
+      "variables": 62702,
+      "seconds": 63.828,
+      "stats": {
+        "restarts": 10233,
+        "conflicts": 200003,
+        "decisions": 901983,
+        "propagations": 573228687
+      },
+      "fixed_star": false,
+      "separations": true
+    },
+    {
+      "case": 3,
+      "gates": 18,
+      "solver": "cadical195",
+      "conflict_budget": 200000,
+      "status": "UNKNOWN",
+      "clauses": 208631,
+      "variables": 54453,
+      "seconds": 52.484,
+      "stats": {
+        "restarts": 10382,
+        "conflicts": 200003,
+        "decisions": 882806,
+        "propagations": 445790355
+      },
+      "fixed_star": false,
+      "separations": true
+    }
+  ],
+  "nineteen_gate_controls": [
+    {
+      "case": 0,
+      "gates": 19,
+      "solver": "cadical195",
+      "conflict_budget": 25000,
+      "status": "SAT",
+      "clauses": 261561,
+      "variables": 69728,
+      "seconds": 0.203,
+      "stats": {
+        "restarts": 0,
+        "conflicts": 0,
+        "decisions": 1753,
+        "propagations": 69728
+      },
+      "fixed_star": true,
+      "separations": true
+    },
+    {
+      "case": 1,
+      "gates": 19,
+      "solver": "cadical195",
+      "conflict_budget": 25000,
+      "status": "SAT",
+      "clauses": 239026,
+      "variables": 62681,
+      "seconds": 0.172,
+      "stats": {
+        "restarts": 0,
+        "conflicts": 0,
+        "decisions": 1622,
+        "propagations": 62681
+      },
+      "fixed_star": true,
+      "separations": true
+    },
+    {
+      "case": 2,
+      "gates": 19,
+      "solver": "cadical195",
+      "conflict_budget": 25000,
+      "status": "SAT",
+      "clauses": 251755,
+      "variables": 66542,
+      "seconds": 0.218,
+      "stats": {
+        "restarts": 0,
+        "conflicts": 0,
+        "decisions": 1725,
+        "propagations": 66542
+      },
+      "fixed_star": true,
+      "separations": true
+    },
+    {
+      "case": 3,
+      "gates": 19,
+      "solver": "cadical195",
+      "conflict_budget": 25000,
+      "status": "SAT",
+      "clauses": 223190,
+      "variables": 57804,
+      "seconds": 0.141,
+      "stats": {
+        "restarts": 0,
+        "conflicts": 0,
+        "decisions": 1519,
+        "propagations": 57804
+      },
+      "fixed_star": true,
+      "separations": true
+    }
+  ]
+}

@@ -61,7 +61,7 @@ def samples_for(seeds, target, width):
     return [i for _,i in seen.values()]
 
 
-def encode(seeds, target, width, bound, dominance=True, ordered=True):
+def encode(seeds, target, width, bound, dominance=True, ordered=True, expose_values=False):
     if target in seeds or bound < 1:
         raise ValueError("This generator expects a non-seed target and a positive gate bound.")
     indices = [i for i,word in enumerate(seeds) if word]
@@ -75,6 +75,7 @@ def encode(seeds, target, width, bound, dominance=True, ordered=True):
     for before,after in zip(live,live[1:]):
         form.clause(-after,before)
     left, right, operations = [], [], []
+    sampled_operands = []
 
     for g in range(bound):
         n = len(wire_values)
@@ -94,6 +95,8 @@ def encode(seeds, target, width, bound, dominance=True, ordered=True):
         x = [form.var() for _ in labels]
         y = [form.var() for _ in labels]
         z = [form.var() for _ in labels]
+        if expose_values:
+            sampled_operands.append((x,y))
         for w,data in enumerate(wire_values):
             for k,source in enumerate(data):
                 for select,wire in ((ls[w],x[k]),(rs[w],y[k])):
@@ -141,6 +144,9 @@ def encode(seeds, target, width, bound, dominance=True, ordered=True):
     metadata = dict(seed_indices=indices,seed_words=seeds,target=target,width=width,
                     samples=sample_ids,live=live,left=left,right=right,op=operations,
                     dominance=dominance,ordered=ordered)
+    if expose_values:
+        metadata["gate_values"] = wire_values[n_inputs:]
+        metadata["operand_values"] = sampled_operands
     return form,metadata
 
 
