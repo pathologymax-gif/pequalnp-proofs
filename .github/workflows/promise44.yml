@@ -10,7 +10,7 @@ permissions:
 
 concurrency:
   group: finite-proof-targets
-  cancel-in-progress: false
+  cancel-in-progress: true
 
 jobs:
   validate:
@@ -24,8 +24,7 @@ jobs:
     # research minutes and sufficient time for final release and cleanup.
     timeout-minutes: 240
     env:
-      # Leave these empty for a normal assignment. Set both only for an
-      # existing independently checked proof, referencing its exact fork SHA.
+      # A run-specific manifest selects a checked candidate after toolchain setup.
       PROOF_SLOT: ${{ matrix.slot }}
       PNP_CHECKED_STEP: ""
       PNP_CHECKED_COMMIT: ""
