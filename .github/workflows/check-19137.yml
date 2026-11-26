@@ -1,0 +1,65 @@
+name: Check the exact L-meta-19137 proof
+
+on:
+  push:
+    branches: [promise44-validation]
+    paths: ['.github/workflows/check-19137.yml']
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    if: github.repository == 'pathologymax-gif/pequalnp-proofs' && github.actor == 'pathologymax-gif'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 70
+    env:
+      PROOF: lean/PEqualNP/Outside/L_meta_19137.lean
+      EXPECTED_SOURCE: 09962bf5585327bffcfc9779da15bf5d581020677d74f1de017e7e55e0a80163
+    steps:
+      - name: Fetch the precise upstream project
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          repository: open-goat/pequalnp-proofs
+          ref: main
+          path: upstream
+          persist-credentials: false
+      - name: Fetch the exact candidate revision
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          ref: 439ec97c630091054907ce1f0422fa5330b0cead
+          path: candidate
+          sparse-checkout: lean/PEqualNP/Outside/L_meta_19137.lean
+          sparse-checkout-cone-mode: false
+          persist-credentials: false
+      - name: Check exact proof bytes and read the posted statement
+        run: |
+          set -euo pipefail
+          printf '%s  %s\n' "$EXPECTED_SOURCE" "candidate/$PROOF" | sha256sum -c -
+          mkdir -p "upstream/$(dirname "$PROOF")"
+          cp "candidate/$PROOF" "upstream/$PROOF"
+          python3 -I - "$RUNNER_TEMP/candidate-statement.txt" <<'PY'
+          import json, sys, urllib.request
+          from pathlib import Path
+          url="https://pequalnp.com/desk/row?gap=L-meta-19137"
+          data=json.load(urllib.request.urlopen(url, timeout=20))
+          rows=[g for g in data.get("gaps",[]) if isinstance(g,dict) and g.get("id")=="L-meta-19137"]
+          assert len(rows)==1 and rows[0]["file"]=="lean/PEqualNP/Outside/L_meta_19137.lean"
+          assert not Path("upstream/STOP").exists()
+          Path(sys.argv[1]).write_text(rows[0]["statement"],encoding="utf-8")
+          PY
+      - name: Install the pinned Lean and Mathlib and compile the verifier
+        working-directory: upstream/lean
+        run: |
+          set -euo pipefail
+          sh ../.github/scripts/install-elan.sh v4.4.0 0e8250aa2be86c7af929ade68db617af9edc8b9ccf6eaf5ece228250d0d032e2 "$HOME/.elan" "$(cat lean-toolchain)"
+          export PATH="$HOME/.elan/bin:$PATH"
+          echo "$HOME/.elan/bin" >> "$GITHUB_PATH"
+          lake env lean --version
+          lake exe cache get
+          lake build checklemma +PEqualNP.Defs
+      - name: Run the upstream checker and record elapsed time and memory
+        working-directory: upstream
+        run: |
+          set -euo pipefail
+          /usr/bin/time -v node tools/check-lean.mjs "$PROOF" "$RUNNER_TEMP/candidate-statement.txt" check
