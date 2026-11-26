@@ -7,6 +7,9 @@ on:
       - 'research/meta-2063/verify_*.py'
       - 'research/meta-2063/shared_disjunction_certificates.json'
       - 'research/meta-2063/common_singleton_certificates.json'
+      - 'research/meta-2063/*mixed*.py'
+      - 'research/meta-2063/mixed_*.json'
+      - 'research/meta-2063/audit_five_orbits.py'
       - 'research/meta-2063/polarity_bounds.py'
       - 'research/meta-2063/quadrangle_faces.py'
       - '.github/workflows/check-meta-2063-research.yml'
@@ -39,3 +42,22 @@ jobs:
         run: python3 verify_common_singletons.py
       - name: Check the unrestricted counts of AND and OR gates
         run: python3 research/meta-2063/polarity_bounds.py
+
+  mixed-helpers:
+    if: github.repository == 'pathologymax-gif/pequalnp-proofs' && github.actor == 'pathologymax-gif'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - name: Check out the submitted revision
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          persist-credentials: false
+      - name: Check the four-gate shared-helper classification
+        working-directory: research/meta-2063
+        run: python3 mixed_four_orbits.py
+      - name: Independently reconstruct the five-gate helper cases
+        working-directory: research/meta-2063
+        run: python3 audit_five_orbits.py
+      - name: Recheck all 64 five-gate integer certificates
+        working-directory: research/meta-2063
+        run: python3 verify_mixed_five.py
