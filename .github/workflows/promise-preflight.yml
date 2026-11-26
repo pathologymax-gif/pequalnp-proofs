@@ -1,0 +1,76 @@
+name: Verify a completed Lean proof for the contributor
+
+on:
+  push:
+    branches: [promise44-validation]
+    paths: [.github/workflows/promise-preflight.yml]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: standalone-verified-proof-preflights
+  cancel-in-progress: false
+
+jobs:
+  validate:
+    strategy:
+      fail-fast: false
+      matrix:
+        slot: [1, 2, 3]
+    if: github.repository == 'pathologymax-gif/pequalnp-proofs' && github.actor == 'pathologymax-gif' && !github.event.deleted
+    runs-on: ubuntu-24.04
+    # Setup, an optional independent preflight, queue retries, 150 live
+    # research minutes and sufficient time for final release and cleanup.
+    timeout-minutes: 105
+    env:
+      # A run-specific manifest selects a checked candidate after toolchain setup.
+      PROOF_SLOT: ${{ matrix.slot }}
+      PNP_CHECKED_STEP: ""
+      PNP_CHECKED_COMMIT: ""
+    steps:
+      - name: Check the weekly time limit
+        run: test "$(date -u +%s)" -lt "$(date -ud '2026-12-02T03:22:45Z' +%s)"
+      - name: Check out the owner's session controller
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          path: session
+          persist-credentials: false
+      - name: Check out the upstream proof project
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          repository: open-goat/pequalnp-proofs
+          ref: main
+          path: upstream
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Prepare the pinned Lean toolchain before leasing
+        working-directory: upstream/lean
+        timeout-minutes: 26
+        run: |
+          set -euo pipefail
+          test ! -e ../STOP
+          test -f lake-manifest.json
+          test -f lean-toolchain
+          test -f ../tools/pnp.sh
+          command -v openssl
+          openssl pkey -pubin -in ../../session/.github/proof-session/receipt-public.pem -noout
+          sh ../.github/scripts/install-elan.sh v4.4.0 0e8250aa2be86c7af929ade68db617af9edc8b9ccf6eaf5ece228250d0d032e2 "$HOME/.elan" "$(cat lean-toolchain)"
+          export PATH="$HOME/.elan/bin:$PATH"
+          echo "$HOME/.elan/bin" >> "$GITHUB_PATH"
+          lake env lean --version
+          lake exe cache get || lake exe cache get
+          lake build checklemma +PEqualNP.Defs
+          git rev-parse HEAD
+          cat lean-toolchain
+      - name: Check the exact public candidate without taking a lease
+        working-directory: upstream
+        run: python3 -I -u ../session/.github/proof-session/check-only.py
+      - name: Preserve the public preflight result
+        if: success()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: checked-proof-${{ matrix.slot }}
+          path: ${{ runner.temp }}/checked-proof.json
+          retention-days: 1
+          if-no-files-found: ignore
