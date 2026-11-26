@@ -20,10 +20,10 @@ SUMMARY = re.compile(r'r=(\d+) t=(\d+) families=(\d+) degree=(\d+) all-one hull=
                      r'full hull=(\d+) remaining=(\d+)')
 
 
-def compiler(tmp):
-    source = HERE/'ManyOrTrees.cs'
+def compiler(tmp, name='ManyOrTrees'):
+    source = HERE/f'{name}.cs'
     desktop = Path(os.environ.get('WINDIR','C:/Windows'))/'Microsoft.NET/Framework64/v4.0.30319/csc.exe'
-    program = tmp/'ManyOrTrees.exe'
+    program = tmp/f'{name}.exe'
     if desktop.exists():
         subprocess.run([desktop,'/nologo','/optimize+',f'/out:{program}',source],check=True)
         return [program]
@@ -32,12 +32,12 @@ def compiler(tmp):
         return ['mono',program]
     major = int(subprocess.check_output(['dotnet','--version'],text=True).split('.')[0])
     shutil.copyfile(source,tmp/'Program.cs')
-    (tmp/'ManyOrTrees.csproj').write_text('<Project Sdk="Microsoft.NET.Sdk"><PropertyGroup>'
+    (tmp/f'{name}.csproj').write_text('<Project Sdk="Microsoft.NET.Sdk"><PropertyGroup>'
         f'<OutputType>Exe</OutputType><TargetFramework>net{major}.0</TargetFramework>'
         '</PropertyGroup></Project>')
     (tmp/'NuGet.Config').write_text('<configuration><packageSources><clear/></packageSources></configuration>')
     subprocess.run(['dotnet','build','-c','Release','-o','build'],cwd=tmp,check=True)
-    return ['dotnet',tmp/'build/ManyOrTrees.dll']
+    return ['dotnet',tmp/f'build/{name}.dll']
 
 
 def graph_check(words):
