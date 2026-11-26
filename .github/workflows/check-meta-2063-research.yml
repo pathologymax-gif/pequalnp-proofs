@@ -1,0 +1,26 @@
+name: Verify the projective-plane research results
+
+on:
+  push:
+    branches: [research/meta-2063]
+    paths:
+      - 'research/meta-2063/verify_*.py'
+      - '.github/workflows/check-meta-2063-research.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    if: github.repository == 'pathologymax-gif/pequalnp-proofs' && github.actor == 'pathologymax-gif'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Check out the submitted revision
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          persist-credentials: false
+      - name: Check the exact 64-gate formula result
+        run: python3 research/meta-2063/verify_plane_formula.py
+      - name: Check all two-star replacements
+        run: python3 research/meta-2063/verify_two_stars.py
