@@ -161,8 +161,23 @@ def empty_queue(data):
                           message, re.I))
 
 
+def print_public_queue_status(data):
+    if not isinstance(data, dict):
+        return
+    for field in ("note", "error", "status"):
+        value = data.get(field)
+        if isinstance(value, str) and value:
+            value = re.sub(r"https?://\S+|[\w.+-]+@[\w.-]+", "[redacted]", value)
+            value = re.sub(r"\b[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}\b",
+                           "[redacted]", value, flags=re.I)
+            value = re.sub(r"\b[A-Za-z0-9_=-]{24,}\b", "[redacted]", value)
+            value = re.sub(r"\b(lease|token|credential|secret)\s*[=:]\s*\S+",
+                           r"\1=[redacted]", value, flags=re.I)
+            print("Desk " + field + " " + json.dumps(value[:320], ensure_ascii=True))
+
+
 def assign():
-    choices = ("warmup", "solid")
+    choices = ("solid",)
     for attempt, level in enumerate(choices, start=1):
         if CUTOFF - time() < MIN_NEW_SESSION + 60:
             raise Stop("Weekly cutoff is too close for a new assignment.")
@@ -172,6 +187,7 @@ def assign():
         print(f"Second assignment request {attempt}/{len(choices)}: {level}, prove.")
         status, data = request(DESK + "next", params)
         if status != 200 or not isinstance(data, dict) or "gap" not in data:
+            print_public_queue_status(data)
             raise Stop(f"Assignment unavailable (HTTP {status}).")
         if data["gap"] is not None:
             lease = data.get("lease")
@@ -183,6 +199,7 @@ def assign():
                 raise Stop("Desk returned the primary session's assignment. Leaving that session untouched.")
             terms = lease.get("terms") or {}
             return lease_id, gap, terms, level
+        print_public_queue_status(data)
         if not empty_queue(data):
             print("Desk returned a restriction or unfamiliar status. No further requests.")
             return None
