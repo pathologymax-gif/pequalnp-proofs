@@ -1,0 +1,61 @@
+name: Check the complete L-gct-234 candidate
+
+on:
+  push:
+    branches: [research/gct-234]
+    paths: ['.github/workflows/check-gct-234-candidate.yml']
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    if: github.repository == 'pathologymax-gif/pequalnp-proofs' && github.actor == 'pathologymax-gif'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 70
+    env:
+      PROOF: lean/PEqualNP/Outside/L_gct_234.lean
+      EXPECTED_SOURCE: b2da64d8d84c6a9fdcdd9a18a40aae43f53128ca1151cfffc950f6353b730cd2
+      EXPECTED_STATEMENT: d5694f032963d43413315562a8d917094d74e35df63cfe250710fadc9bd29064
+    steps:
+      - name: Fetch the precise upstream project
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          repository: open-goat/pequalnp-proofs
+          ref: d82dd4d5ddc53bfc09def53d92781e0ff866726f
+          path: upstream
+          persist-credentials: false
+      - name: Fetch the exact candidate revision
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          ref: d31f9a3fbb7385083b083216479d19c41cc73588
+          path: candidate
+          sparse-checkout: lean/PEqualNP/Outside/L_gct_234.lean
+          sparse-checkout-cone-mode: false
+          persist-credentials: false
+      - name: Confirm proof and public assignment statement
+        env:
+          ASSIGNED_STATEMENT: "∀ (s : Fin 3 → ℝ) (g : Fin 3 → Polynomial ℝ), (∀ i, s i = 1 ∨ s i = -1) → (∀ i, (g i).support.card ≤ 2) → ((Finset.univ : Finset (Fin 3)).sum fun i => Polynomial.C (s i) * g i ^ 3) ≠ 0 → ∀ x : ℝ, 0 < x → Polynomial.rootMultiplicity x ((Finset.univ : Finset (Fin 3)).sum fun i => Polynomial.C (s i) * g i ^ 3) ≤ 9"
+        run: |
+          set -euo pipefail
+          printf '%s  %s\n' "$EXPECTED_SOURCE" "candidate/$PROOF" | sha256sum -c -
+          test "$(wc -c < "candidate/$PROOF")" -eq 514616
+          mkdir -p "upstream/$(dirname "$PROOF")"
+          cp "candidate/$PROOF" "upstream/$PROOF"
+          printf '%s' "$ASSIGNED_STATEMENT" > "$RUNNER_TEMP/candidate-statement.txt"
+          printf '%s  %s\n' "$EXPECTED_STATEMENT" "$RUNNER_TEMP/candidate-statement.txt" | sha256sum -c -
+      - name: Install the pinned Lean and Mathlib and compile the verifier
+        working-directory: upstream/lean
+        run: |
+          set -euo pipefail
+          sh ../.github/scripts/install-elan.sh v4.4.0 0e8250aa2be86c7af929ade68db617af9edc8b9ccf6eaf5ece228250d0d032e2 "$HOME/.elan" "$(cat lean-toolchain)"
+          export PATH="$HOME/.elan/bin:$PATH"
+          echo "$HOME/.elan/bin" >> "$GITHUB_PATH"
+          lake env lean --version
+          lake exe cache get
+          lake build checklemma +PEqualNP.Defs
+      - name: Run the upstream checker and record elapsed time and memory
+        working-directory: upstream
+        run: |
+          set -euo pipefail
+          /usr/bin/time -v node tools/check-lean.mjs "$PROOF" "$RUNNER_TEMP/candidate-statement.txt" check
