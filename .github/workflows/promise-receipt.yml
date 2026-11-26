@@ -1,0 +1,31 @@
+name: Read public proof validation receipts
+on:
+  push:
+    branches: [promise44-validation]
+    paths: [.github/workflows/promise-receipt.yml]
+permissions:
+  actions: read
+  contents: read
+jobs:
+  read-receipt:
+    if: github.repository == 'pathologymax-gif/pequalnp-proofs' && github.actor == 'pathologymax-gif'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 3
+    steps:
+      - name: Retrieve the existing public encrypted proof receipts
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          for slot in 1 2 3; do
+            if gh run download 45783344841 --repo pathologymax-gif/pequalnp-proofs -n "proof-ready-$slot" -D "$RUNNER_TEMP/slot-$slot"; then
+              python3 -I - "$RUNNER_TEMP/slot-$slot/proof-session-ready.json" <<'PY'
+          import base64, json, re, sys
+          data = json.load(open(sys.argv[1], encoding="utf-8"))
+          assert re.fullmatch(r"L-[a-z]+-\d+", data["step"])
+          assert re.fullmatch(r"[0-9a-f]{40}", data["commit"])
+          assert len(base64.b64decode(data["encrypted_receipt"], validate=True)) in (256,384,512)
+          print("ENCRYPTED_PROOF_RECEIPT", data["step"], data["commit"], data["encrypted_receipt"])
+          PY
+            fi
+          done
