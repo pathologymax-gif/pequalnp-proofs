@@ -26,6 +26,8 @@ jobs:
         run: python3 research/meta-2063/verify_plane_formula.py
       - name: Check all two-star replacements
         run: python3 research/meta-2063/verify_two_stars.py
+      - name: Check all three-collinear-star replacements
+        run: python3 research/meta-2063/verify_three_stars.py
       - name: Check the sole shared raw gate
         run: python3 research/meta-2063/verify_raw_shared_gate.py
       - name: Check the unrestricted counts of AND and OR gates
