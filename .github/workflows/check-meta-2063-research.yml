@@ -5,6 +5,8 @@ on:
     branches: [research/meta-2063]
     paths:
       - 'research/meta-2063/verify_*.py'
+      - 'research/meta-2063/polarity_bounds.py'
+      - 'research/meta-2063/quadrangle_faces.py'
       - '.github/workflows/check-meta-2063-research.yml'
 
 permissions:
@@ -24,3 +26,7 @@ jobs:
         run: python3 research/meta-2063/verify_plane_formula.py
       - name: Check all two-star replacements
         run: python3 research/meta-2063/verify_two_stars.py
+      - name: Check the sole shared raw gate
+        run: python3 research/meta-2063/verify_raw_shared_gate.py
+      - name: Check the unrestricted counts of AND and OR gates
+        run: python3 research/meta-2063/polarity_bounds.py
