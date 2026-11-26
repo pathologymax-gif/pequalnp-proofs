@@ -30,7 +30,7 @@ Choose $X$ for which $A(1,X)=1$ and $A(0,X)=0$. Such an assignment exists becaus
 
 The Lean theorem `MonotoneMerge.replace_complement` checks the replacement identity at the first merge. The same file checks the neutral setting for a positive path and the inference of local monotonicity from a sensitized outer context. [MonotoneMerge.lean](MonotoneMerge.lean)
 
-The project's open row L-meta-17828 asks for an AND/OR circuit of the same or smaller size whenever a circuit with one NOT computes the specified monotone output, with no upper limit on the starting size. For the one-output model, the proposition proves that conclusion whenever the circuit has at most one more gate than the number of essential input variables. An unused input can be fixed before applying the result and the resulting circuit can ignore that input on the original domain. The larger-size cases of the row remain open. [Project row L-meta-17828](https://pequalnp-desk.pequalnp.workers.dev/desk/row?gap=L-meta-17828)
+Project row L-meta-17828 asks for an AND/OR circuit of the same or smaller size whenever a circuit with one NOT computes the specified monotone output, with no upper limit on the starting size. For the one-output model, the proposition proves that conclusion whenever the circuit has at most one more gate than the number of essential input variables. An unused input can be fixed before applying the result and the resulting circuit can ignore that input on the original domain. A separate argument proves that larger circuits yield counterexamples to the universal statement. [One-negation size proof](OneNegationSize.md) · [Project row L-meta-17828](https://pequalnp-desk.pequalnp.workers.dev/desk/row?gap=L-meta-17828)
 
 ## A lower bound for the project's essential NOT
 
