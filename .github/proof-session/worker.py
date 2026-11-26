@@ -49,6 +49,10 @@ class LeaseLost(Stop):
     pass
 
 
+class StepClosed(Stop):
+    pass
+
+
 class CandidateChanged(Exception):
     """An owner branch revision superseded the bytes currently being checked."""
 
@@ -483,7 +487,7 @@ def session():
 def require_open(path, step=None, need_known=False):
     main = current_main()
     if git("ls-tree", main, "--", path):
-        raise Stop("The assignment file is already on latest upstream main.")
+        raise StepClosed("The assignment file is already on latest upstream main.")
     if step is not None:
         try:
             status, row = request(DESK + "step", {"gap": step})
@@ -493,7 +497,7 @@ def require_open(path, step=None, need_known=False):
             row = None
         state = row.get("state") if isinstance(row, dict) else None
         if isinstance(state, str) and state not in ("open", "leased"):
-            raise Stop("The desk reports that the assignment is no longer open.")
+            raise StepClosed("The desk reports that the assignment is no longer open.")
         if need_known and state not in ("open", "leased"):
             raise Stop("The desk did not confirm the targeted step is still open. No lease requested.")
     return main
@@ -563,22 +567,35 @@ def confirm():
     receipt = json.loads(temp_file(ARTIFACT_READY).read_text())
     commit = receipt["commit"]
     next_ready = next_pr = 0
+
+    def submitted():
+        number = matching_pr(step, commit, lease)
+        if number is None:
+            return False
+        print(f"Confirmed upstream pull request {number}.")
+        close("submitted")
+        return True
+
     while monotonic() < deadline:
         if monotonic() >= next_pr:
-            number = matching_pr(step, commit, lease)
-            if number is not None:
-                print(f"Confirmed upstream pull request {number}.")
-                close("submitted")
+            if submitted():
                 return
             next_pr = monotonic() + 75
         if head(step) != commit:
+            if submitted():
+                return
             print("Checked branch changed before submission. Revalidating the new revision on this assignment.")
             build()
             commit = json.loads(temp_file(ARTIFACT_READY).read_text())["commit"]
             next_ready = next_pr = 0
             continue
         if monotonic() >= next_ready:
-            require_open(path, step)
+            try:
+                require_open(path, step)
+            except StepClosed:
+                if submitted():
+                    return
+                raise
             renew(lease, checked=True)
             print("SUBMIT READY " + timestamp() + " " + commit)
             next_ready = monotonic() + 60
@@ -637,6 +654,13 @@ if __name__ == "__main__":
     signal.signal(signal.SIGTERM, interrupted)
     try:
         main()
+    except StepClosed as exc:
+        private = temp_file("proof-session-private.json")
+        if private.exists():
+            state = json.loads(private.read_text())
+            state["release_reason"] = "other"
+            private.write_text(json.dumps(state), encoding="utf-8")
+        raise SystemExit(str(exc)) from None
     except LeaseLost as exc:
         # End this phase immediately. The unconditional cleanup step can still
         # release this particular lease on a transient outage and erase it.
