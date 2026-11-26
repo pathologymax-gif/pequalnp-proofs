@@ -14,7 +14,7 @@ def model(seed):
     yidx, zidx, rows, cols, vals = {}, {}, [], [], []
     def row(r, terms):
         for i,v in terms: rows.append(r); cols.append(i); vals.append(v)
-    for v in range(11):
+    for v in range(len(seed)):
         inc=[i for i,e in enumerate(edges) if v in e]
         for mask in range(1,1 << len(inc)):
             star=tuple(i for ii,i in enumerate(inc) if mask>>ii&1)
