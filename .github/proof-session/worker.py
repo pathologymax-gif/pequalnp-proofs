@@ -24,9 +24,13 @@ FORK_URL = "https://github.com/" + FORK + ".git"
 DESK = "https://pequalnp.com/desk/"
 MODULE = re.compile(r"(?:Mathlib|PEqualNP)(?:\.[A-Za-z][A-Za-z0-9_]*)*")
 LIMIT = 524288
+SESSION_SECONDS = 150 * 60
+MIN_NEW_SESSION = 20 * 60
+POLL_SECONDS = 25
 CUTOFF = datetime(2026, 12, 2, 3, 22, 45, tzinfo=timezone.utc).timestamp()
 ARTIFACT_ASSIGN = "proof-session-assignment.json"
 ARTIFACT_READY = "proof-session-ready.json"
+last_desk_at = 0
 
 
 def temp_file(name):
@@ -45,12 +49,22 @@ class LeaseLost(Stop):
     pass
 
 
+class CandidateChanged(Exception):
+    """An owner branch revision superseded the bytes currently being checked."""
+
+
 class NoRedirect(HTTPRedirectHandler):
     def redirect_request(self, req, fp, code, msg, headers, newurl):
         return None
 
 
 def request(url, params, method="GET"):
+    global last_desk_at
+    if url.startswith(DESK):
+        delay = 3 - (monotonic() - last_desk_at)
+        if delay > 0:
+            sleep(delay)
+        last_desk_at = monotonic()
     endpoint = url + "?" + urlencode(params)
     req = Request(endpoint, method=method, headers={"User-Agent": "Brett-Snodgrass-proof-session"})
     try:
@@ -60,7 +74,12 @@ def request(url, params, method="GET"):
                 raise Stop("Remote response exceeded the size limit.")
             return response.status, json.loads(payload)
     except HTTPError as exc:
-        return exc.code, None
+        with exc:
+            try:
+                payload = exc.read(2 * 1024 * 1024 + 1)
+                return exc.code, json.loads(payload) if len(payload) <= 2 * 1024 * 1024 else None
+            except (ValueError, OSError):
+                return exc.code, None
     except (URLError, OSError, ValueError):
         raise Stop("Remote response could not be confirmed.") from None
 
@@ -87,18 +106,30 @@ def current_main():
     return main
 
 
-def renew(lease):
-    try:
-        status, response = request(DESK + "beat", {"lease": lease}, "POST")
-    except Stop:
-        raise LeaseLost("Lease renewal could not be confirmed.") from None
-    renewed = response.get("lease") if isinstance(response, dict) else None
-    if (not 200 <= status < 300 or not isinstance(renewed, dict)
-            or not renewed.get("expires_at") or renewed.get("id", lease) != lease
-            or response.get("withdrawn")):
-        raise LeaseLost(f"Lease renewal failed (HTTP {status}).")
-    print("Lease renewed.")
-    return monotonic() + 210
+def renew(lease, checked=False):
+    # pnp.sh stops unfinished work on a missing lease. Its submit path permits
+    # an already checked proof after ordinary expiration, but never withdrawal.
+    for attempt in range(4 if checked else 1):
+        try:
+            status, response = request(DESK + "beat", {"lease": lease}, "POST")
+        except Stop:
+            status, response = 0, None
+        if isinstance(response, dict) and response.get("withdrawn") is True:
+            raise LeaseLost("The desk withdrew the step. Do not submit.")
+        renewed = response.get("lease") if isinstance(response, dict) else None
+        if (200 <= status < 300 and isinstance(renewed, dict)
+                and renewed.get("id", lease) == lease):
+            print("Lease renewed.")
+            return "renewed"
+        if not checked:
+            raise LeaseLost(f"Unfinished work stopped after unconfirmed renewal (HTTP {status}).")
+        if isinstance(response, dict) and 100 <= status < 500:
+            print(f"Finished proof eligible for submission after a non-renewing response (HTTP {status}).")
+            return "not_renewed"
+        if attempt < 3:
+            sleep(3)
+    print("Submission renewal was unavailable after retries; the official client permits the finished proof.")
+    return "unconfirmed"
 
 
 def empty_queue(data):
@@ -106,11 +137,6 @@ def empty_queue(data):
     message = data.get("error") or data.get("note") or ""
     if not isinstance(message, str):
         raise Stop("The empty-queue response contains an unexpected status.")
-    # Only human-readable status is logged; leases, tokens and links stay private.
-    safe = re.sub(r"https?://\S+|[A-Za-z0-9_-]{20,}", "[redacted]", message)
-    safe = re.sub(r"(?i)\b(lease|token|key)\s*[:=]\s*\S+", r"\1=[redacted]", safe)
-    safe = " ".join(safe.split())[:400]
-    print("Desk status " + json.dumps(safe or "No assignment available.", ensure_ascii=True))
     if data.get("error") or data.get("lease") or any(data.get(key) for key in
             ("disabled", "paused", "blocked", "hold", "held", "leases", "active_lease",
              "existing_lease", "cooldown", "retry_after", "retry_after_seconds")):
@@ -131,15 +157,27 @@ def empty_queue(data):
                           message, re.I))
 
 
-def assign():
-    for attempt, hard in enumerate((False, True, False), start=1):
-        if CUTOFF - time() < 42 * 60:
+def assign(evidence=None):
+    choices = (False,) if evidence else (False, True, False)
+    for attempt, hard in enumerate(choices, start=1):
+        if CUTOFF - time() < MIN_NEW_SESSION + 60:
             raise Stop("Weekly cutoff is too close for a new assignment.")
         current_main()
-        params = {"handle": OWNER, "kind": "prove"}
-        if hard:
+        params = {"handle": OWNER, "value": "1"}
+        if evidence:
+            if head(evidence["id"]) != evidence["commit"]:
+                raise Stop("The independently checked revision changed before assignment.")
+            row = public_row(evidence["id"])
+            if descriptor(row) != evidence["descriptor"]:
+                raise Stop("The desk statement changed after the independent check. No lease requested.")
+            require_open(row["file"], row["id"], need_known=True)
+            params.update(gap=evidence["id"], have="proof")
+        else:
+            params["kind"] = "prove"
+        if hard and not evidence:
             params["hard"] = "1"
-        print(f"Assignment request {attempt}/3, {'hard' if hard else 'all levels'}.")
+        print(f"Assignment request {attempt}/{len(choices)}, "
+              + ("verified existing proof." if evidence else "hard." if hard else "all levels."))
         status, data = request(DESK + "next", params)
         if status != 200 or not isinstance(data, dict) or "gap" not in data:
             raise Stop(f"Assignment unavailable (HTTP {status}).")
@@ -152,10 +190,10 @@ def assign():
         if not empty_queue(data):
             print("Desk returned a restriction or unfamiliar status. No further requests.")
             return None
-        if attempt < 3:
+        if attempt < len(choices):
             print("Waiting three minutes before requesting another assignment.")
             sleep(180)
-    print("No available assignment after three spaced requests.")
+    print("No available assignment in the requested queue.")
     return None
 
 
@@ -181,16 +219,19 @@ def describe(gap):
     return step, path
 
 
-def guard_statement(gap):
-    # Reuse the pinned official client's complete standalone Python guard.
-    # The program comes from the repository. The desk's data only goes to stdin.
-    start = "guard_py() { cat <<'PY'\n"
+def client_python(start):
+    # These fixed, local programs come from the pinned official shell client.
     code = Path("tools/pnp.sh").read_text(encoding="utf-8")
     if code.count(start) != 1:
-        raise Stop("The pinned client's statement guard is unavailable.")
-    guard, sep, _ = code.split(start, 1)[1].partition("\nPY\n}")
+        raise Stop("A pinned client validation routine is unavailable.")
+    body, sep, _ = code.split(start, 1)[1].partition("\nPY\n}")
     if not sep:
-        raise Stop("The pinned client's statement guard has changed shape.")
+        raise Stop("A pinned client validation routine changed shape.")
+    return body
+
+
+def guard_statement(gap):
+    guard = client_python("guard_py() { cat <<'PY'\n")
     guard += "\ng = json.load(sys.stdin); sys.exit(bool(why(g['statement']) or imports_why(g.get('imports'))))"
     outcome = run([sys.executable, "-I", "-c", guard], input=json.dumps(gap).encode())
     if outcome.returncode:
@@ -255,13 +296,47 @@ def matching_pr(step, commit, lease):
     return None
 
 
-def exact_header(content, gap):
-    normalized = " ".join(content.decode().split())
-    header = f"theorem {gap['module']} : ({gap['statement']}) := by"
-    return " ".join(header.split()) in normalized
+def guarded_candidate(proof, path, gap, directory):
+    clean = Path(directory, "proof.lean")
+    meta = Path(directory, "descriptor.json")
+    clean.write_bytes(proof)
+    meta.write_text(json.dumps({"gap": gap}), encoding="utf-8")
+    tidy = client_python("tidy() { python3 -I - \"$1\" <<'PY'\n")
+    fmt = client_python("format_py() { cat <<'PY'\n")
+    if run([sys.executable, "-I", "-c", tidy, str(clean)]).returncode or clean.read_bytes() != proof:
+        return False
+    return run([sys.executable, "-I", "-c", fmt, str(clean), path, str(meta)]).returncode == 0
+
+
+def stop_checker(proc, lock, owns_new_lock):
+    # The upstream exact checker releases its empty directory lock on TERM.
+    try:
+        os.killpg(proc.pid, signal.SIGTERM)
+    except ProcessLookupError:
+        pass
+    try:
+        proc.wait(timeout=6)
+    except subprocess.TimeoutExpired:
+        pass
+    try:
+        os.killpg(proc.pid, signal.SIGKILL)
+    except ProcessLookupError:
+        pass
+    proc.wait()
+    # This checkout is exclusive to this job. Preserve any preexisting lock,
+    # symlink or nonempty directory. rmdir never recurses through owned files.
+    if owns_new_lock and not lock.is_symlink():
+        try:
+            lock.rmdir()
+        except FileNotFoundError:
+            pass
+        except OSError:
+            raise Stop("The interrupted checker left a lock that could not be safely reclaimed.") from None
 
 
 def check_command(args, cwd, deadline, beat, expect_accept=False):
+    lock = Path(cwd, "lean/.lake/check.lock")
+    owns_new_lock = expect_accept and not os.path.lexists(lock)
     with tempfile.TemporaryFile() as log:
         proc = subprocess.Popen(args, cwd=cwd, stdout=log, stderr=subprocess.STDOUT, start_new_session=True)
         try:
@@ -270,15 +345,21 @@ def check_command(args, cwd, deadline, beat, expect_accept=False):
                     raise Stop("Session time expired during validation.")
                 beat()
                 sleep(4)
-        finally:
-            if proc.poll() is None:
-                os.killpg(proc.pid, signal.SIGKILL)
-                proc.wait()
+        except BaseException:
+            stop_checker(proc, lock, owns_new_lock)
+            raise
         log.seek(max(0, log.tell() - 12000))
         tail = log.read().decode("utf-8", "replace")
+        if proc.returncode == 120 or any(line.startswith("STOPPED by a notice on the proofs repository")
+                                         for line in tail.splitlines()):
+            raise Stop("The official client reported upstream STOP. Ending the session.")
+        if not expect_accept and proc.returncode == 3:
+            raise Stop("The official client stopped work on this step.")
         accepted = any(line.startswith("ACCEPTED (check)") for line in tail.splitlines())
         if proc.returncode or (expect_accept and not accepted):
-            print("Check output " + json.dumps(tail))
+            # The proof controls some diagnostics. Don't copy them into public
+            # logs, GitHub workflow command channels, output names, or artifacts.
+            print(f"Candidate check failed (exit {proc.returncode}).")
             return False
         return True
 
@@ -288,14 +369,85 @@ def set_output(name):
         print(name + "=true", file=output)
 
 
+def watch_revision(step, commit, beat):
+    next_poll = 0
+
+    def poll():
+        nonlocal next_poll
+        beat()
+        if monotonic() >= next_poll:
+            if head(step) != commit:
+                raise CandidateChanged
+            next_poll = monotonic() + POLL_SECONDS
+
+    return poll
+
+
+def proof_of_evidence(pinned):
+    step = os.environ.get("PNP_CHECKED_STEP", "")
+    commit = os.environ.get("PNP_CHECKED_COMMIT", "")
+    if not step and not commit:
+        return None
+    if not re.fullmatch(r"L-[a-z]+-[0-9]+", step) or not re.fullmatch(r"[0-9a-f]{40}", commit):
+        raise Stop("Targeted work needs both a step and an immutable previously checked revision.")
+    gap = public_row(step)
+    guard_statement(gap)
+    found, path = describe(gap)
+    if found != step or head(step) != commit or Path(path).exists():
+        raise Stop("Targeted evidence does not match the available step and branch.")
+    proof = candidate(step, path, commit, require_open(path, step), pinned)
+    if not proof:
+        raise Stop("The named revision does not contain exactly the assigned file.")
+    next_stop = 0
+
+    def check_stop():
+        nonlocal next_stop
+        if monotonic() >= next_stop:
+            require_open(path, step)
+            next_stop = monotonic() + 210
+
+    deadline = monotonic() + min(50 * 60, max(0, CUTOFF - time() - 60))
+    with tempfile.TemporaryDirectory(dir=os.environ["RUNNER_TEMP"]) as directory:
+        if not guarded_candidate(proof, path, gap, directory):
+            raise Stop("The official file guard refused the preexisting bytes. No lease requested.")
+        statement = Path(directory, "statement.txt")
+        statement.write_text(gap["statement"], encoding="utf-8")
+        try:
+            Path(path).write_bytes(proof)
+            accepted = check_command(["node", "tools/check-lean.mjs", path, str(statement), "check"],
+                                     ".", deadline, watch_revision(step, commit, check_stop), expect_accept=True)
+            if not accepted or Path(path).read_bytes() != proof or head(step) != commit:
+                raise Stop("The independent byte-exact checker did not certify this revision. No lease requested.")
+        except CandidateChanged:
+            raise Stop("The supplied candidate moved during independent verification. No lease requested.") from None
+        finally:
+            Path(path).unlink(missing_ok=True)
+    return dict(id=step, commit=commit, descriptor=descriptor(gap))
+
+
+def descriptor(gap):
+    return (gap.get("id"), gap.get("file"), gap.get("module"), gap.get("statement"), gap.get("imports") or [])
+
+
+def public_row(step):
+    status, data = request(DESK + "row", {"gap": step})
+    gaps = data.get("gaps") if isinstance(data, dict) else None
+    matches = [g for g in gaps if isinstance(g, dict) and g.get("id") == step] if isinstance(gaps, list) else []
+    if status != 200 or len(matches) != 1:
+        raise Stop("The public desk did not return exactly one matching row. No lease requested.")
+    return matches[0]
+
+
 def acquire():
     pinned = git("rev-parse", "HEAD").decode().strip()
-    assignment = assign()
+    evidence = proof_of_evidence(pinned)
+    assignment = assign(evidence)
     if assignment is None:
         return
     lease, gap = assignment
     # Only this runner can read this file. No GitHub artifact includes it.
-    state = {"lease": lease, "deadline": min(time() + 36 * 60, CUTOFF - 60)}
+    state = {"lease": lease, "deadline": min(time() + SESSION_SECONDS, CUTOFF - 60),
+             "release_reason": "other"}
     private = temp_file("proof-session-private.json")
     with os.fdopen(os.open(private, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600), "w") as stream:
         json.dump(state, stream)
@@ -303,11 +455,15 @@ def acquire():
         raise Stop("Desk metadata unexpectedly contains private lease data.")
     if not isinstance(gap, dict):
         raise Stop("Invalid assignment type.")
+    if evidence and descriptor(gap) != evidence["descriptor"]:
+        raise Stop("The issued row differs from the independently checked row. Returning it.")
     guard_statement(gap)
     step, path = describe(gap)
     if git("ls-tree", pinned, "--", path):
         raise Stop("The pinned upstream tree already has the assignment file.")
     renew(lease)
+    state["release_reason"] = "out_of_time"
+    private.write_text(json.dumps(state), encoding="utf-8")
     public = {key: gap[key] for key in ("id", "file", "module", "statement")}
     public.update(imports=gap.get("imports") or [], upstream=pinned)
     temp_file(ARTIFACT_ASSIGN).write_text(json.dumps(public, ensure_ascii=False, indent=2), encoding="utf-8")
@@ -324,10 +480,22 @@ def session():
     return private["lease"], gap, deadline
 
 
-def require_open(path):
+def require_open(path, step=None, need_known=False):
     main = current_main()
     if git("ls-tree", main, "--", path):
         raise Stop("The assignment file is already on latest upstream main.")
+    if step is not None:
+        try:
+            status, row = request(DESK + "step", {"gap": step})
+            if not 200 <= status < 300:
+                row = None
+        except Stop:
+            row = None
+        state = row.get("state") if isinstance(row, dict) else None
+        if isinstance(state, str) and state not in ("open", "leased"):
+            raise Stop("The desk reports that the assignment is no longer open.")
+        if need_known and state not in ("open", "leased"):
+            raise Stop("The desk did not confirm the targeted step is still open. No lease requested.")
     return main
 
 
@@ -336,12 +504,12 @@ def build():
     step, path = gap["id"], gap["file"]
     next_beat = 0
 
-    def beat(force=False):
+    def beat():
         nonlocal next_beat
-        if force or monotonic() >= next_beat:
-            main = require_open(path)
-            next_beat = renew(lease)
-            return main
+        if monotonic() >= next_beat:
+            require_open(path, step)
+            renew(lease)
+            next_beat = monotonic() + 210
 
     tested = None
     attempts = 0
@@ -354,30 +522,38 @@ def build():
             attempts += 1
             main = require_open(path)
             proof = candidate(step, path, commit, main, gap["upstream"])
-            if proof and not exact_header(proof, gap):
-                print("Candidate rejected. Keep the theorem header from the official skeleton.")
-                proof = None
-                attempts = 2
             if proof:
                 Path(path).write_bytes(proof)
-                if check_command(["bash", "tools/pnp.sh", "check", step], ".", deadline, beat):
-                    if Path(path).read_bytes() != proof:
-                        print("The checker normalized the file. Commit the comment-free bytes and retry.")
-                        attempts = 2
-                    elif check_command(["node", "tools/check-lean.mjs", path,
-                                        str(temp_file("proof-session-statement.txt")), "check"],
-                                       ".", deadline, beat, expect_accept=True):
-                        if head(step) != commit:
-                            continue
-                        beat(force=True)
-                        ready = dict(step=step, commit=commit, upstream=gap["upstream"],
-                                     sha256=hashlib.sha256(proof).hexdigest(), renewed_utc=timestamp(),
-                                     encrypted_receipt=encrypted_receipt(lease))
-                        temp_file(ARTIFACT_READY).write_text(json.dumps(ready, indent=2), encoding="utf-8")
-                        print("SUBMIT READY " + ready["renewed_utc"] + " " + commit)
-                        set_output("ready")
-                        return
-        sleep(min(25, max(0, deadline - monotonic())))
+                poll = watch_revision(step, commit, beat)
+                try:
+                    if check_command(["bash", "tools/pnp.sh", "check", step], ".", deadline, poll):
+                        if Path(path).read_bytes() != proof:
+                            print("The checker normalized the file. Commit the comment-free bytes and retry.")
+                            attempts = 2
+                        elif check_command(["node", "tools/check-lean.mjs", path,
+                                            str(temp_file("proof-session-statement.txt")), "check"],
+                                           ".", deadline, poll, expect_accept=True):
+                            if head(step) != commit:
+                                continue
+                            require_open(path, step)
+                            status = renew(lease, checked=True)
+                            if head(step) != commit:
+                                if status != "renewed":
+                                    raise LeaseLost("The checked revision moved without an active lease. Do not submit.")
+                                continue
+                            checked_utc = timestamp()
+                            ready = dict(step=step, commit=commit, upstream=gap["upstream"],
+                                         sha256=hashlib.sha256(proof).hexdigest(), checked_utc=checked_utc,
+                                         renewed_utc=checked_utc if status == "renewed" else None,
+                                         lease_status=status, encrypted_receipt=encrypted_receipt(lease))
+                            temp_file(ARTIFACT_READY).write_text(json.dumps(ready, indent=2), encoding="utf-8")
+                            print("SUBMIT READY " + ready["checked_utc"] + " " + commit)
+                            set_output("ready")
+                            return
+                except CandidateChanged:
+                    print("Candidate revision changed. Stopped the superseded checker; continuing this assignment.")
+                    continue
+        sleep(min(POLL_SECONDS, max(0, deadline - monotonic())))
     raise Stop("Assignment window expired.")
 
 
@@ -386,33 +562,62 @@ def confirm():
     step, path = gap["id"], gap["file"]
     receipt = json.loads(temp_file(ARTIFACT_READY).read_text())
     commit = receipt["commit"]
-    next_ready = 0
+    next_ready = next_pr = 0
     while monotonic() < deadline:
-        number = matching_pr(step, commit, lease)
-        if number is not None:
-            print(f"Confirmed upstream pull request {number}.")
-            close("submitted")
-            return
+        if monotonic() >= next_pr:
+            number = matching_pr(step, commit, lease)
+            if number is not None:
+                print(f"Confirmed upstream pull request {number}.")
+                close("submitted")
+                return
+            next_pr = monotonic() + 75
         if head(step) != commit:
-            raise Stop("The checked proof branch moved; the receipt is stale.")
+            print("Checked branch changed before submission. Revalidating the new revision on this assignment.")
+            build()
+            commit = json.loads(temp_file(ARTIFACT_READY).read_text())["commit"]
+            next_ready = next_pr = 0
+            continue
         if monotonic() >= next_ready:
-            require_open(path)
-            renew(lease)
+            require_open(path, step)
+            renew(lease, checked=True)
             print("SUBMIT READY " + timestamp() + " " + commit)
             next_ready = monotonic() + 60
         sleep(min(25, max(0, deadline - monotonic())))
     raise Stop("Assignment window expired.")
 
 
-def close(reason):
+def close(reason, final=False):
     private = temp_file("proof-session-private.json")
     if private.exists():
         lease = json.loads(private.read_text())["lease"]
-        status, _ = request(DESK + "release", {"lease": lease, "reason": reason}, "POST")
-        print(f"Desk release {reason}, HTTP {status}.")
-        if not 200 <= status < 300 and status != 410:
-            raise Stop("Desk did not confirm release.")
-        private.unlink()
+        try:
+            status, _ = request(DESK + "release", {"lease": lease, "reason": reason}, "POST")
+            print(f"Desk release {reason}, HTTP {status}.")
+            if not 200 <= status < 300 and status != 410:
+                raise Stop("Desk did not confirm release.")
+        except Stop:
+            if not final:
+                # Cleanup must retry the original reason if a submitted release
+                # fails, rather than marking the accepted submission out of time.
+                state = json.loads(private.read_text())
+                state["release_reason"] = reason
+                private.write_text(json.dumps(state), encoding="utf-8")
+            raise
+        else:
+            private.unlink(missing_ok=True)
+        finally:
+            if final:
+                private.unlink(missing_ok=True)
+
+
+def cleanup():
+    private = temp_file("proof-session-private.json")
+    if private.exists():
+        try:
+            reason = json.loads(private.read_text()).get("release_reason", "out_of_time")
+            close(reason, final=True)
+        finally:
+            private.unlink(missing_ok=True)
 
 
 def main():
@@ -422,7 +627,7 @@ def main():
         raise Stop("This job runs only on its owner's designated fork and branch.")
     if len(sys.argv) != 2 or sys.argv[1] not in ("acquire", "build", "confirm", "cleanup"):
         raise Stop("Unknown workflow phase.")
-    commands = {"acquire": acquire, "build": build, "confirm": confirm, "cleanup": lambda: close("out_of_time")}
+    commands = {"acquire": acquire, "build": build, "confirm": confirm, "cleanup": cleanup}
     commands[sys.argv[1]]()
 
 
@@ -433,9 +638,8 @@ if __name__ == "__main__":
     try:
         main()
     except LeaseLost as exc:
-        # No further work or publish is permitted after an unconfirmed renewal.
-        # An abandoned lease expires automatically if the service was unreachable.
-        temp_file("proof-session-private.json").unlink(missing_ok=True)
+        # End this phase immediately. The unconditional cleanup step can still
+        # release this particular lease on a transient outage and erase it.
         raise SystemExit(str(exc)) from None
     except Stop as exc:
         raise SystemExit(str(exc)) from None
