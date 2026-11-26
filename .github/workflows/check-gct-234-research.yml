@@ -1,0 +1,50 @@
+name: Check partial results for L-gct-234
+
+on:
+  push:
+    branches: [research/gct-234]
+    paths:
+      - 'research/gct-234/*.lean'
+      - '.github/workflows/check-gct-234-research.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  lean:
+    if: github.repository == 'pathologymax-gif/pequalnp-proofs' && github.actor == 'pathologymax-gif'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - name: Check out the research revision
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          path: research-revision
+          persist-credentials: false
+      - name: Check out the assignment's exact upstream revision
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          repository: open-goat/pequalnp-proofs
+          ref: d82dd4d5ddc53bfc09def53d92781e0ff866726f
+          path: upstream
+          persist-credentials: false
+      - name: Load the pinned Lean and Mathlib versions
+        working-directory: upstream/lean
+        run: |
+          set -euo pipefail
+          sh ../.github/scripts/install-elan.sh v4.4.0 0e8250aa2be86c7af929ade68db617af9edc8b9ccf6eaf5ece228250d0d032e2 "$HOME/.elan" "$(cat lean-toolchain)"
+          export PATH="$HOME/.elan/bin:$PATH"
+          echo "$HOME/.elan/bin" >> "$GITHUB_PATH"
+          lake env lean --version
+          lake exe cache get
+      - name: Elaborate each research file and print its declared axiom audit
+        working-directory: upstream/lean
+        run: |
+          set -euo pipefail
+          for source in "$GITHUB_WORKSPACE"/research-revision/research/gct-234/*.lean; do
+            test -f "$source"
+            name=$(basename "$source")
+            cp "$source" "$name"
+            echo "Checking $name"
+            lake env lean -DwarningAsError=true "$name"
+          done
