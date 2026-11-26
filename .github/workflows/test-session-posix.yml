@@ -1,0 +1,50 @@
+name: Session controller offline regressions
+
+on:
+  push:
+    branches: [research/session-controller-posix]
+    paths:
+      - '.github/workflows/test-session-posix.yml'
+      - '.github/proof-session/test_controller.py'
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    if: github.repository == 'pathologymax-gif/pequalnp-proofs' && github.actor == 'pathologymax-gif'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Check out only the staged controller and its tests
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          path: staged
+          persist-credentials: false
+          sparse-checkout: |
+            .github/proof-session/worker.py
+            .github/proof-session/test_controller.py
+          sparse-checkout-cone-mode: false
+      - name: Fetch the pinned public protocol guard fixture
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          repository: open-goat/pequalnp-proofs
+          ref: 51d70e19aa62853774db05aae318e033761580ca
+          path: fixture
+          sparse-checkout: tools/pnp.sh
+          sparse-checkout-cone-mode: false
+          persist-credentials: false
+      - name: Run mock regressions and real Linux child-process interruption without network
+        shell: bash
+        run: |
+          set -euo pipefail
+          suite="$RUNNER_TEMP/session-controller-tests"
+          mkdir "$suite"
+          cp staged/.github/proof-session/worker.py "$suite/proof-session-worker.py"
+          cp staged/.github/proof-session/test_controller.py "$suite/test_controller.py"
+          cp fixture/tools/pnp.sh "$suite/reference-pnp.sh"
+          test "$(git hash-object "$suite/reference-pnp.sh")" = ff5542351b61744c6487f580d4689c7cf76f32c3
+          cd "$suite"
+          printf '%s  %s\n' 16e45b18ca5c80ef4cbe6a575c2ab00575890b5dd2850fdc78ba9332bd08b526 proof-session-worker.py | sha256sum --check
+          sudo -n unshare --net -- setpriv --reuid="$(id -u)" --regid="$(id -g)" --clear-groups -- \
+            python3 -I -u test_controller.py -v
