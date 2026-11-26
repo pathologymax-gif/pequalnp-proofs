@@ -1,14 +1,15 @@
-name: Validate one P vs NP assignment
+name: Validate one additional warmup or solid proof
 
 on:
   push:
-    branches: [proof-research-session]
+    branches: [proof-research-second]
+    paths: ['.github/workflows/proof-session.yml']
 
 permissions:
   contents: read
 
 concurrency:
-  group: one-p-vs-np-assignment
+  group: second-p-vs-np-assignment
   cancel-in-progress: false
 
 jobs:
@@ -18,11 +19,6 @@ jobs:
     # Setup, an optional independent preflight, queue retries, 150 live
     # research minutes and sufficient time for final release and cleanup.
     timeout-minutes: 240
-    env:
-      # Leave these empty for a normal assignment. Set both only for an
-      # existing independently checked proof, referencing its exact fork SHA.
-      PNP_CHECKED_STEP: ""
-      PNP_CHECKED_COMMIT: ""
     steps:
       - name: Check the weekly time limit
         run: test "$(date -u +%s)" -lt "$(date -ud '2026-12-02T03:22:45Z' +%s)"
