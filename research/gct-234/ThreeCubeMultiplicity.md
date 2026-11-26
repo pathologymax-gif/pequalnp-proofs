@@ -1,6 +1,6 @@
 # Positive-root multiplicity of three cubes of binomials
 
-For the project question `L-gct-234`, let \(F(X)=\sum_{i=1}^3 s_i g_i(X)^3\), where \(s_i=\pm1\), each real polynomial \(g_i\) has at most two monomials, and \(F\ne0\). These arguments prove multiplicity at most nine at every positive root shared by at least one \(g_i\). They also prove bounds for several families in which all three binomials are nonzero at the root. The general case with no vanishing binomial remains unresolved by this note.
+For the project question `L-gct-234`, let \(F(X)=\sum_{i=1}^3 s_i g_i(X)^3\), where \(s_i=\pm1\), each real polynomial \(g_i\) has at most two monomials, and \(F\ne0\). These arguments prove a sharp upper bound of **seven** at every positive root shared by at least one \(g_i\). They also prove bounds for several families in which all three binomials are nonzero at the root. The general case with no vanishing binomial remains unresolved by this note.
 
 The calculations were developed and independently cross-checked by the collaborating project agents. The accompanying `verify_three_cubes.py` reproduces the polynomial identities with exact rational arithmetic in SymPy. The proofs below explain why the identities apply.
 
@@ -8,7 +8,9 @@ The calculations were developed and independently cross-checked by the collabora
 
 At a positive point \(x_0\), substitute \(X=x_0e^t\). The Taylor order at \(t=0\) equals the original root multiplicity because \(x_0e^t-x_0\) has a simple zero. Absorb \(s_i\) into \(g_i\). Each binomial becomes \(a e^{ut}+b e^{vt}\), allowing arbitrary nonzero real coefficients and nonnegative integer exponents \(u<v\). The coefficient rescaling absorbs \(x_0\).
 
-For an exponential polynomial \(\sum_{e\in S}c_e e^{et}\), Taylor order at least \(k\) is equivalent to \(\sum_e c_e P(e)=0\) for every polynomial \(P\) of degree below \(k\). A Vandermonde determinant gives order at most \(|S|-1\) for a nonzero sum. In particular, if one of the three polynomials is a monomial or zero, there are at most nine distinct exponents after cubing and adding. Whenever the combined support has at most ten exponents, the desired bound already follows. We may therefore assume all three binomials have two distinct terms.
+For an exponential polynomial \(\sum_{e\in S}c_e e^{et}\), Taylor order at least \(k\) is equivalent to \(\sum_e c_e P(e)=0\) for every polynomial \(P\) of degree below \(k\). A Vandermonde determinant gives order at most \(|S|-1\) for a nonzero sum. In particular, if one of the three polynomials is a monomial or zero, there are at most nine distinct exponents after cubing and adding. Whenever the combined support has at most ten exponents, the project's bound of nine follows.
+
+For the stronger bound of seven, first handle an identically zero summand. The two remaining cubes factor as \((A+B)(A^2-AB+B^2)\). The first factor is nonzero and has at most four exponents, hence order at most three. The second is strictly positive unless both \(A,B\) vanish. In that case its order is at most two, since a nonzero binomial has only simple positive roots and the quadratic form is positive definite. This gives order at most five (at most three if one of \(A,B\) is nonzero at the point). Nonzero monomials do not vanish at a positive point. The exactly-one-vanishing argument below handles monomials among the other two summands through its \(v=0\) case.
 
 ## All three binomials vanish
 
@@ -34,7 +36,23 @@ With these substitutions the fifth moment of the mixture minus that of the third
 -4p(p-2)(p-1)(p+1)(2p-1)/27.
 \]
 
-Its only zero for \(0<p<1\) is \(p=1/2\). At that value the sixth moment difference is \(1/42\), contradicting equality.
+Its only zero for \(0<p<1\) is \(p=1/2\). At that value the sixth moment difference is \(1/42\), contradicting equality. This argument allows arbitrary real exponents.
+
+For integer exponents, multiplicity at least eight already gives a contradiction using only moments through degree four. Before removing the third mean, each mean was three times the midpoint of two integers. Their nonzero difference is rational, so the mean equation makes \(p\) rational in the distinct-means case. The rescaled standard deviation \(\sqrt{v_1}\) is rational as well: it is the absolute value of a half-integer exponent gap divided by that difference of means. The second through fourth moment identities give \(9v_1=8p^2-5p+5\). With \(k=3\sqrt{v_1}\), this would imply
+
+\[
+(16p-5)^2-2(4k)^2=-135.
+\]
+
+Any nonzero rational number of the form \(X^2-2Y^2\) has even 3-adic valuation. Indeed, remove the common power of three from \(X,Y\); modulo three their unit-denominator squares have nonzero sum if at least one is a unit. Restoring the common power multiplies the norm by a square. Since \(-135=-5\cdot3^3\), its valuation is odd. This rules out order eight. The equal-means case used only second and fourth moments as well.
+
+The bound of seven is attained at \(X=1\) by
+
+\[
+F=(X^6-1)^3-9[X(X^4-1)]^3+45[X^2(X^2-1)]^3.
+\]
+
+The positive factors \(9,45\) are absorbed into the binomials by their real cube roots. All three binomials vanish at one. Exact division by \((X-1)^7\) gives a polynomial whose value at one is \(936\), proving the stated multiplicity.
 
 ## Exactly one binomial vanishes
 
@@ -72,7 +90,7 @@ Their resultant is \(-994245331968000000\), so they have no common root. Exactly
 
 The integer exponents in the project give the stronger bound **seven** in the exactly-one-vanishing case. Multiplicity at least eight would already force the third and fourth centered-moment equations. For \(z\ne0\), the third gives \(v=-1/40\). The fourth residual becomes \(-(400z^4+14720z^2+18549)/350000\), which is strictly negative. For \(z=0\), before the rescaling the sum of the two recurrence parameters is zero. If the original exponent pairs were \((A_i,B_i)\), this gives \(4\mu=A_1+B_1+A_2+B_2\). Moreover the difference between the recurrence parameters is the nonzero integer \(A_1+B_1-A_2-B_2\), so the rescaling factor is rational. Both centered exponents and \(v\) are therefore rational. The fourth-moment equation above reduces in \(V=3v\) to \(272V^2-844V-3=0\), whose discriminant \(715600\) lies strictly between \(845^2\) and \(846^2\). This excludes a rational root.
 
-## Two restrictions on nonvanishing binomials
+## Restrictions on nonvanishing binomials
 
 **Coefficients of one sign within each binomial.** Each cubed binomial contributes a signed measure supported on at most four exponents, whose atomic weights all have the same sign. If the total has a root, move the single term of one sign to the other side so that two positive measures sum to a third through the known moments. For the set \(S\) supporting that third measure, test with \(P(z)=\prod_{s\in S}(z-s)^2\). Its degree is at most eight. If the root has multiplicity at least nine, the integral of \(P\) against the two positive measures is zero. Their supports are therefore contained in \(S\). The Vandermonde bound makes the entire sum zero. This proves multiplicity at most eight in this family.
 
@@ -105,3 +123,11 @@ In particular, if \((a,b,c,d)=(P_i(e_{i0}),\ldots,P_i(e_{i3}))\), a necessary co
 \]
 
 for each of the three blocks. This is the discriminant of \(a+3bT+3cT^2+dT^3\) divided by 27, interpreted as a polynomial identity even when the cubic degenerates. The three tests provide an exact way to reject candidate exponent patterns. Simultaneous vanishing of the discriminants alone does not establish multiplicity ten. The unresolved case still requires excluding every admissible pattern or constructing and checking a counterexample.
+
+**Disjoint exponent intervals.** The remaining case can also exclude triples whose three closed exponent intervals are pairwise disjoint. There are twelve distinct nodes. Let \(P(z)\) be their monic product of linear factors. At a putative tenfold root the generating function \(\sum_e c_e/(z-e)\) has zero coefficients at \(z^{-1},\ldots,z^{-10}\), by the moment conditions. Its numerator over \(P(z)\) is therefore a nonzero polynomial \(L(z)\) of degree at most one, and \(c_e=L(e)/P'(e)\). Within a block let \(P_{\rm own}(z)\) be its four linear factors multiplied together and \(Q=P/P_{\rm own}\). Since \(P_{\rm own}'(A+jD)=(-1)^{3-j}D^3 j!(3-j)!\), the cubic weights imply \(\log|Q/L|\) is affine at the block's four equally spaced nodes. For constant \(L\), this is impossible: \(\log|Q|\) is strictly concave throughout that block. For nonconstant \(L\), let \(\ell\) denote its zero. Choose the leftmost or rightmost block so some node \(r\) of the middle block lies strictly between that block and \(\ell\). Such a choice exists because the middle block has four distinct nodes. Throughout the chosen block, \(|x-r|<|x-\ell|\), so
+
+\[
+\frac{d^2}{dx^2}\log|Q(x)/L(x)|=\frac1{(x-\ell)^2}-\sum_{e\,\text{outside the block}}\frac1{(x-e)^2}<0.
+\]
+
+This again contradicts affine values at the equally spaced nodes.

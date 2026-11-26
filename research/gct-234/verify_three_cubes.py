@@ -54,8 +54,19 @@ def check_three_vanishing():
     m_value = (8-14*r)/9
     require_identity(residual(4).subs(delta, delta_value), sp.Rational(4, 5)*r*(m-m_value))
     substitutions = {delta: delta_value, m: m_value}
+    scaled_variance = 8*p**2-5*p+5
+    require_identity(9*variance1.subs(substitutions), scaled_variance)
+    require_identity((16*p-5)**2 - 32*scaled_variance, -135)
+    if {((a*a - 2*b*b) % 3) for a in range(3) for b in range(3) if a or b} != {1, 2}:
+        raise AssertionError("Expected the norm of each nonzero residue pair to be a unit modulo three.")
     require_identity(residual(5).subs(substitutions), -4*p*(p-2)*(p-1)*(p+1)*(2*p-1)/27)
     require_identity(residual(6).subs(substitutions).subs(p, sp.Rational(1, 2)), sp.Rational(1, 42))
+
+    x = sp.Symbol("x")
+    witness = (x**6-1)**3 - 9*(x*(x**4-1))**3 + 45*(x**2*(x**2-1))**3
+    quotient, remainder = sp.div(witness, (x-1)**7, x)
+    require_identity(remainder)
+    require_identity(quotient.subs(x, 1), 936)
 
 
 def centered_unit_cube(c, variance):
@@ -119,7 +130,7 @@ def check_midpoint_and_discriminant():
 
 if __name__ == "__main__":
     check_three_vanishing()
-    print("Verified three vanishing binomials, including the sixth-moment residual 1/42.")
+    print("Verified three vanishing binomials, the rational obstruction, and the sharp order-seven witness (quotient 936).")
     check_one_vanishing()
     print("Verified one vanishing binomial, including the nonzero resultant -994245331968000000.")
     check_midpoint_and_discriminant()
