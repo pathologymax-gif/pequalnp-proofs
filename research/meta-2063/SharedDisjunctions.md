@@ -1,0 +1,38 @@
+# A single shared disjunction cannot save a gate on the quadrangle tests
+
+On the order-three projective plane's 52 positive incidence tests and 234 negative quadrangle tests, at least **64 binary monotone gates** are required if the circuit's only shared intermediate is a disjunction of any number of raw variables. The shared value can be used arbitrarily often. The bound also holds if its private formula uses **at most three gates of either type**. A 64-gate point-star formula gives equality for the class allowing these types of sharing. The desk's full statement permits larger mixed private formulas and multiple shared intermediates. [Project statement](https://pequalnp-desk.pequalnp.workers.dev/desk/row?gap=L-meta-2063)
+
+## Disjunctions of arbitrary support
+
+Let the shared value be $h=\bigvee_{v\in S}x_v$ on the full Boolean cube, where $k=|S|\ge2$. Every variable in $S$ is essential to that function, so its connected private cone needs at least $k-1$ gates. This includes every private tree consisting entirely of OR gates. Cutting its output leaves a formula with $L$ ordinary leaves and at least two occurrences of $h$. The original circuit therefore needs at least $L+k$ gates. Repeated occurrences of an ordinary source in the private cone can only increase its cost.
+
+The [adjacent-star certificate for two-input OR](RawSharedGate.md) proves $L\ge62$ at $k=2$. For larger supports we use two tests with the same integer verifier.
+
+- A **full test** for $S$ allows the helper to claim any cell where the positive incidence meets $S$ and the negative input misses $S$. Its lower bound on ordinary leaves applies to that support.
+- A **cofactor test** for $T\subseteq S$ keeps all positive incidences and the negative quadrangles meeting $T$. Set every occurrence of $h$ in the outer formula to one. Every positive is still accepted by monotonicity, and each retained negative already had $h=1$. After folding constants the formula has at most $L$ ordinary leaves. Thus a lower bound on this restricted ordinary formula applies to every $S$ containing $T$.
+
+Both tests use the score identity proved in the two-input case. The only change of weight permits a separate nonnegative integer for each geometric flag type. A required cell's weight enters the total exactly once, regardless of its assigned endpoint. The four score transfers for each vertex and local flag still sum to zero. The weights and coefficients are supplied explicitly.
+
+| Size of $S$ | Supports checked | Minimum ordinary leaves certified | Total gate lower bound |
+|---|---:|---:|---:|
+| 2 | 325 | 62 | 64 |
+| 3 | 2,600 | 61 | 64 |
+| 4 | 14,950 | 60 | 64 |
+| 5 | 65,780 | 59 | 64 |
+| 6 through 26 | Every superset of a five-element support | 59 | $59+k$ |
+
+For size three, the ten orbits under two verified incidence-preserving permutations split into two point-only, two line-only and six mixed orbits. In each collinear-point or concurrent-line triple, doubling the area weight on one flag type gives the needed lower bound of 61. The ten direct or cofactor tests cover the size-three row. Inclusion lifts cofactor tests to some of the 25 size-four orbits; seven additional cofactor certificates cover the rest. For size five, every set contains three points or three lines. The four corresponding homogeneous triples all have cofactor lower bounds at least 59. Every larger support contains a five-element subset with the same cofactor witness. The verifier enumerates every subset through size five, so it checks this coverage without assuming transitivity or orbit counts.
+
+**An unrestricted private cone with four singleton witnesses.** All four-element supports in the table are covered by cofactor certificates. Suppose an arbitrary nonconstant monotone shared value accepts four distinct singleton inputs. Each corresponding variable is essential since the empty input is rejected, and the private cone costs at least three gates. Every negative containing any of the four singletons has $h=1$, so the same cofactor certificate forces $L\ge60$. The two occurrences of $h$ now give a total of at least $3+60+2-1=64$, regardless of the private cone's shape or size.
+
+## Private formulas with up to three gates
+
+Consider any single shared helper $h$ with a $g$-gate private formula. Let $P$ be the set of positive incidence edges on which $h$ is true. Any subset $D$ of the incidence edges has an ordinary formula with at most $|D|+\tau(D)-1$ gates when nonempty. Here $\tau(D)$ is its minimum vertex-cover size. Assign each edge to a cover vertex and OR together its stars. Every negative quadrangle rejects every edge, so the formula is zero on every negative.
+
+Two replacements will be used. First, if $|P|+\tau(P)\le g+2$, set $h=0$ throughout the outer formula and OR in the clean edge formula for $P$. With at least two distinct readers, constant folding removes at least two gates. The final OR and correction cost at most $|P|+\tau(P)$, so the original gate budget covers the replacement. Second, keep an OR $w$ on $s\ge1$ raw variables such that $w\le h$ on every negative. Replace $h$ by $w$ and OR in the positive edges $D$ on which $h=1,w=0$. On negatives both the old context and the correction are zero; on positives outside $D$, monotonicity preserves acceptance. The private OR and correction require at most $(s-1)+|D|+\tau(D)$ gates. If this is at most $g$, only a pure disjunction can remain shared. Empty corrections are simply omitted. Before these operations, repeated operands can be simplified; if this removes sharing, the ordinary formula bound applies.
+
+For an AND root with a raw operand $x$, if $h$ accepts the singleton $x$ then $h=x$ by monotonicity. Otherwise every accepted edge contains $x$ and one of the at most $g$ other raw leaves. Its edges form a star, so the first replacement applies. If both children of the root are binary gates, then $g=3$. An AND child restricts positive acceptance to at most one edge after simplification. For two OR children with an overlapping variable, the helper reduces to $x\lor(y\land z)$ or a pure disjunction. Keep $x$ and correct at most one edge. For two OR children with disjoint inputs, all accepted edges lie among the four cross pairs. The incidence graph has no four-cycle, hence at most three are edges, with a cover of size at most two. Again $|P|+\tau(P)\le5$.
+
+For an OR root, flatten its top disjunction. One two-leaf conjunction term contributes at most one edge, and at most two singleton terms remain. Keeping their disjunction and correcting that edge costs at most $g$. With a three-leaf conjunction-rooted term, only one other singleton can appear. The term either reduces to a raw singleton or contributes at most two edges through a single raw operand, whose correction costs at most three gates. Finally, two nontrivial conjunction-rooted terms use all four leaves, contribute at most two edges and satisfy the first replacement. These cases include repeated variables after idempotence. Thus every mixed private formula of size at most three reduces to an ordinary formula or a circuit with a single shared pure disjunction within its original budget.
+
+The [integer checker](verify_shared_disjunctions.py) uses the [coefficient file](shared_disjunction_certificates.json), [weighted local verifier](verify_raw_shared_gate.py) and [plane geometry](verify_plane_formula.py). Run `python verify_shared_disjunctions.py` with Python 3.10 or later. The replay checks 19 certificates in addition to the four binary cases. It uses neither floating-point arithmetic nor an optimizer.

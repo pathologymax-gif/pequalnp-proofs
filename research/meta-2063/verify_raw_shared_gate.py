@@ -75,19 +75,21 @@ def families(required_rows):
     return result
 
 
-def pattern(v,m,support):
+def pattern(v,m,support,helper_optional=None):
     available = support.isdisjoint(m)
     needed, optional = 0,0
     for k,edge in enumerate(STARS[v]):
         neighbor = edge[1] if v < 13 else edge[0]
-        if available and not support.isdisjoint(edge):
+        free = (available and not support.isdisjoint(edge)
+                if helper_optional is None else helper_optional(edge,m))
+        if free:
             optional |= 1<<k
         elif neighbor in m:
             needed |= 1<<k
     return v in m, needed, optional
 
 
-def menu(v,edge,patterns,tags,base,count_transfer,private_transfer):
+def menu(v,edge,patterns,tags,base,count_transfer,private_transfer,area_costs):
     bit = 1<<STARS[v].index(edge)
     local = {}
     required = 0
@@ -97,7 +99,7 @@ def menu(v,edge,patterns,tags,base,count_transfer,private_transfer):
         for u in range(16):
             if (excluded and u) or (not excluded and needed&~u):
                 continue
-            cost[u] = (u&~optional).bit_count()
+            cost[u] = area_costs[u&~optional]
         local[excluded,needed,optional] = cost
     result = []
     for size,unions,private in families(required):
@@ -122,17 +124,28 @@ def menu(v,edge,patterns,tags,base,count_transfer,private_transfer):
     return result
 
 
-def verify_support(pair,columns):
-    support = set(pair)
-    base,point_count,line_count,point_private,line_private,expected = CERTIFICATES[pair]
+def verify_weighted(support,columns,base,point_count,line_count,point_private,line_private,
+                    row_weights=None,cofactor=False,helper_optional=None):
+    support = set(support)
     def tag(e):
         return tuple(sorted((distance(e[0],s),distance(e[1],s)) for s in support))
     tag_types = sorted(set(map(tag,FLAGS)))
     tags = {e:tag_types.index(tag(e)) for e in FLAGS}
     assert all(len(x)==len(tag_types) for x in (point_count,line_count,point_private,line_private))
-    required_area = sum(not(support.isdisjoint(m) and not support.isdisjoint(e))
-                        for m in columns for e in FLAGS)
-    patterns = [[pattern(v,m,support) for m in columns] for v in range(26)]
+    if row_weights is None:
+        row_weights = [1]*len(tag_types)
+    assert len(row_weights)==len(tag_types) and all(w>=0 for w in row_weights)
+    if cofactor:
+        columns = [m for m in columns if not support.isdisjoint(m)]
+    free_support = set() if cofactor else support
+    def optional(e,m):
+        if helper_optional is not None:
+            return helper_optional(e,m)
+        return free_support.isdisjoint(m) and not free_support.isdisjoint(e)
+    required_area = sum(row_weights[tags[e]] for m in columns for e in FLAGS if not optional(e,m))
+    patterns = [[pattern(v,m,free_support,optional) for m in columns] for v in range(26)]
+    area_costs = [[sum(row_weights[tags[e]] for i,e in enumerate(STARS[v]) if union&(1<<i))
+                   for union in range(16)] for v in range(26)]
     total = 0
     for edge in FLAGS:
         p,l = edge
@@ -140,8 +153,8 @@ def verify_support(pair,columns):
         pm,lm = zip(*groups)
         bit = 1<<STARS[p].index(edge)
         weights = tuple((n,bool(pat[2]&bit)) for (pat,_),n in groups.items())
-        left = menu(p,edge,pm,tags,base,point_count,point_private)
-        right = menu(l,edge,lm,tags,base,line_count,line_private)
+        left = menu(p,edge,pm,tags,base,point_count,point_private,area_costs[p])
+        right = menu(l,edge,lm,tags,base,line_count,line_private,area_costs[l])
         best = None
         for lp,ps in left:
             for rl,ls in right:
@@ -160,8 +173,15 @@ def verify_support(pair,columns):
         assert best is not None
         total += best
     numerator = total-4*required_area
-    assert numerator == expected and numerator > 61*4*base
     return numerator,4*base,required_area
+
+
+def verify_support(pair,columns):
+    base,point_count,line_count,point_private,line_private,expected = CERTIFICATES[pair]
+    numerator,denominator,required_area = verify_weighted(
+        pair,columns,base,point_count,line_count,point_private,line_private)
+    assert numerator == expected and numerator > 61*4*base
+    return numerator,denominator,required_area
 
 
 def main():
