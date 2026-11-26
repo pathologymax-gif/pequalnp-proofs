@@ -167,7 +167,7 @@ def assign(evidence=None):
         if CUTOFF - time() < MIN_NEW_SESSION + 60:
             raise Stop("Weekly cutoff is too close for a new assignment.")
         current_main()
-        params = {"handle": OWNER, "value": "1"}
+        params = {"handle": OWNER, "value": "1", "model": "gpt-6"}
         if evidence:
             if head(evidence["id"]) != evidence["commit"]:
                 raise Stop("The independently checked revision changed before assignment.")
@@ -202,7 +202,7 @@ def assign(evidence=None):
 
 
 def describe(gap):
-    if not isinstance(gap, dict) or gap.get("kind") not in (None, "check", "prove"):
+    if not isinstance(gap, dict) or gap.get("kind") not in (None, "check", "prove", "refute"):
         raise Stop("The response is not a proof assignment.")
     step = gap.get("id")
     if not isinstance(step, str) or not re.fullmatch(r"L-[a-z]+-[0-9]+", step):
