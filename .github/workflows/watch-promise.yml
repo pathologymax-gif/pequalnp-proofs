@@ -1,0 +1,44 @@
+name: Find a new four-by-four promise circuit
+
+on:
+  push:
+    branches: [research/promise-detector]
+    paths: [.github/workflows/watch-promise.yml]
+
+permissions:
+  contents: write
+  actions: read
+
+concurrency:
+  group: single-four-by-four-scout
+  cancel-in-progress: false
+
+jobs:
+  scout:
+    if: github.repository == 'pathologymax-gif/pequalnp-proofs' && github.actor == 'pathologymax-gif' && !github.event.deleted
+    runs-on: ubuntu-24.04
+    timeout-minutes: 125
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          persist-credentials: false
+      - name: Read the public project board
+        run: python3 -u tools/watch_promise.py snapshot
+      - name: Save public board fields for independent analysis
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: public-desk-board
+          path: ${{ runner.temp }}/public-proof-scout/board_public.json
+          retention-days: 1
+      - name: Find one open circuit problem with a verified truth table
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python3 -u tools/watch_promise.py
+      - name: Save candidate details
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: promise-candidate
+          path: ${{ runner.temp }}/public-proof-scout/candidate.json
+          retention-days: 1
+          if-no-files-found: ignore
