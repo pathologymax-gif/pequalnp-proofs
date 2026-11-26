@@ -6,6 +6,8 @@ The assignment asks whether a nonzero signed sum of the cubes of three real poly
 | --- | --- |
 | [ThreeCubeMultiplicity.md](ThreeCubeMultiplicity.md) | Proves the sharp upper bound of seven when at least one input polynomial vanishes at the positive root. It also treats several other families. |
 | [ThreeCubeNonvanishing.md](ThreeCubeNonvanishing.md) | Treats special cases with three nonvanishing inputs and derives an exact finite test. It excludes multiplicity ten or higher for every exponent configuration of width at most 100. |
+| [ThreeCubeGapElimination.md](ThreeCubeGapElimination.md) | Proves the bound of nine for exponent gaps proportional to 1, 2, 3 or to 1, 2, 4, with arbitrary starting exponents, and gives a nonzero polynomial that every exceptional ratio of gaps must satisfy. |
+| [verify_cube_reflected_integer.py](verify_cube_reflected_integer.py) | Strengthens the upper bound to six for the reflection-symmetric family described in the script when exponents are integers. Its exact mod-13 calculation distinguishes this from real-exponent exponential sums that can attain eight. |
 | [ReductionGct234.lean](ReductionGct234.lean) | Formally proves the case of at most ten output monomials and normalizes the remaining problem to the root one under two explicit hypotheses about larger supports. |
 | [ThreeCubeSharpWitness.lean](ThreeCubeSharpWitness.lean) | Formally proves an explicit polynomial factorization and root multiplicity seven. The first note explains how real cube-root scalings place the example in the signed problem. |
 | [CubeResidueObstruction.md](CubeResidueObstruction.md) | Proves the upper bound of nine whenever the twelve exponents in the expanded cubes occupy at least eleven residue classes modulo some prime from 11 through 101. This applies at any exponent width. Two independent implementations check 50,925,347 configurations across 22 primes. |
@@ -18,10 +20,13 @@ The symbolic checks require Python, NumPy and SymPy. The short independent suppo
 ```sh
 python verify_three_cubes.py
 python verify_cube_common_mean.py
+python verify_cube_reflected_integer.py
 python verify_cube_supports.py --count 50 100 --exact 12
 python search_cube_order10.py --degree 100
 node verify_cube_supports_modular.js 100
 python verify_cube_residues.py 11 13
+python cube_gap_exact_elimination.py 1 2 4
+python verify_cube_gap_specialization.py
 ```
 
 Prepared by Brett Snodgrass and collaborating research agents. The small-support Lean proof adapts an argument by [williamzheng0711 in pull request 23279](https://github.com/open-goat/pequalnp-proofs/pull/23279). The source file records the original commit.
