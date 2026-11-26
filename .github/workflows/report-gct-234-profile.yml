@@ -1,0 +1,59 @@
+name: Summarize the completed L-gct-234 profile
+
+on:
+  push:
+    branches: [research/gct-234]
+    paths: ['.github/workflows/report-gct-234-profile.yml']
+
+permissions:
+  actions: read
+
+jobs:
+  summarize:
+    if: github.repository == 'pathologymax-gif/pequalnp-proofs' && github.actor == 'pathologymax-gif'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 4
+    steps:
+      - name: Summarize the recorded elapsed times of the public proof
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          cd "$RUNNER_TEMP"
+          gh api repos/pathologymax-gif/pequalnp-proofs/actions/artifacts/15090858743/zip > profile.zip
+          printf '%s  %s\n' '68d56dbbe6dc752a0676cd3b9fea524fc005b745ae5460e2d27191ee51791951' profile.zip | sha256sum -c -
+          python3 - <<'PY'
+          from collections import Counter, defaultdict
+          import re
+          from zipfile import ZipFile
+
+          with ZipFile("profile.zip") as archive:
+              record = archive.getinfo("lean-profile.txt")
+              assert record.file_size < 30_000_000
+              lines = archive.read(record).decode("utf-8").splitlines()
+          events = []
+          source = ""
+          for line in lines:
+              location = re.search(r"L_gct_234\.lean:(\d+):(\d+)", line)
+              if location:
+                  source = location.group(1) + ":" + location.group(2)
+              match = re.search(r"\[([\w.]+)\]\s*\[(\d+(?:\.\d+)?)\]\s*(.*)", line)
+              if match:
+                  category, seconds, label = match.groups()
+                  events.append((float(seconds), category, source, label.strip()[:205]))
+          print(f"Raw lines: {len(lines)}; timed trace entries: {len(events)}")
+          for tag, count in Counter(e[1] for e in events).most_common(25):
+              print(f"Category {tag}: {count} entries")
+          print("Longest individual trace entries (nested timings overlap):")
+          for seconds, category, loc, label in sorted(events, reverse=True)[:85]:
+              print(f"Hotspot {seconds:10.3f}s {category:35s} source={loc} {label}")
+          print("Longest entry per reported source location:")
+          groups = defaultdict(list)
+          for event in events:
+              groups[event[2]].append(event)
+          for seconds, category, loc, label in sorted((max(g) for g in groups.values()), reverse=True)[:65]:
+              print(f"Location {seconds:10.3f}s {category:35s} source={loc} {label}")
+          print("Sample unformatted profiler output:")
+          for line in lines[:22]:
+              print("Sample " + line[:260])
+          PY
