@@ -6,6 +6,7 @@ on:
     paths:
       - 'research/meta-2063/verify_*.py'
       - 'research/meta-2063/shared_disjunction_certificates.json'
+      - 'research/meta-2063/common_singleton_certificates.json'
       - 'research/meta-2063/polarity_bounds.py'
       - 'research/meta-2063/quadrangle_faces.py'
       - '.github/workflows/check-meta-2063-research.yml'
@@ -29,7 +30,12 @@ jobs:
         run: python3 research/meta-2063/verify_two_stars.py
       - name: Check all three-collinear-star replacements
         run: python3 research/meta-2063/verify_three_stars.py
+      - name: Check all three-noncollinear-star replacements
+        run: python3 research/meta-2063/verify_triangle_stars.py
       - name: Check every sole shared pure disjunction
         run: python3 research/meta-2063/verify_shared_disjunctions.py
+      - name: Check shared gates with common singleton witnesses
+        working-directory: research/meta-2063
+        run: python3 verify_common_singletons.py
       - name: Check the unrestricted counts of AND and OR gates
         run: python3 research/meta-2063/polarity_bounds.py
