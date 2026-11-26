@@ -10,7 +10,7 @@ permissions:
 
 concurrency:
   group: standalone-verified-proof-preflights
-  cancel-in-progress: false
+  cancel-in-progress: true
 
 jobs:
   validate:
@@ -25,6 +25,7 @@ jobs:
     timeout-minutes: 105
     env:
       # A run-specific manifest selects a checked candidate after toolchain setup.
+      PROOF_QUEUE_RUN: "45786134580"
       PROOF_SLOT: ${{ matrix.slot }}
       PNP_CHECKED_STEP: ""
       PNP_CHECKED_COMMIT: ""
