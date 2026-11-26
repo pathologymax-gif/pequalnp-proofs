@@ -101,17 +101,62 @@ def renew(lease):
     return monotonic() + 210
 
 
+def empty_queue(data):
+    """Only ordinary scarcity qualifies for another request. Hold on unknown states."""
+    message = data.get("error") or data.get("note") or ""
+    if not isinstance(message, str):
+        raise Stop("The empty-queue response contains an unexpected status.")
+    # Only human-readable status is logged; leases, tokens and links stay private.
+    safe = re.sub(r"https?://\S+|[A-Za-z0-9_-]{20,}", "[redacted]", message)
+    safe = re.sub(r"(?i)\b(lease|token|key)\s*[:=]\s*\S+", r"\1=[redacted]", safe)
+    safe = " ".join(safe.split())[:400]
+    print("Desk status " + json.dumps(safe or "No assignment available.", ensure_ascii=True))
+    if data.get("error") or data.get("lease") or any(data.get(key) for key in
+            ("disabled", "paused", "blocked", "hold", "held", "leases", "active_lease",
+             "existing_lease", "cooldown", "retry_after", "retry_after_seconds")):
+        return False
+    if data.get("status") not in (None, "ok", "empty", "no_gap", "unavailable", "all_taken", "no_match"):
+        return False
+    if not message.strip():
+        return True
+    if re.search(r"disabl|paus|limit|quota|calibrat|onboard|enroll|cooldown|hold|"
+                 r"you (?:already )?(?:have|hold)|your (?:active |existing )?lease|"
+                 r"existing lease|denied|forbidden|suspend|stop|register|authenticat|"
+                 r"permission|credential|eligib|community|new (?:agent|user)|already|must|maintenance|"
+                 r"hours?|tomorrow|do not|don.t|commands?|tools/|\bcurl\b|\bwget\b", message, re.I):
+        return False
+    return bool(re.search(r"\b(?:no (?:open |available |matching )?(?:steps?|gaps?|work|assignments?)|"
+                          r"every (?:open )?(?:step|gap)|all (?:the )?(?:open )?(?:steps|gaps)|"
+                          r"nothing (?:available|open|right now)|taken|leased out|try again|ask again|check back)\b",
+                          message, re.I))
+
+
 def assign():
-    status, data = request(DESK + "next", {"handle": OWNER, "level": "solid", "kind": "prove"})
-    if status != 200 or not isinstance(data, dict):
-        raise Stop(f"Assignment unavailable (HTTP {status}).")
-    if data.get("gap") is None:
-        print("The desk has no available assignment.")
-        return None
-    lease = (data.get("lease") or {}).get("id")
-    if not isinstance(lease, str) or not re.fullmatch(r"[A-Za-z0-9-]{1,64}", lease):
-        raise Stop("The desk supplied no usable lease identifier.")
-    return lease, data["gap"]
+    for attempt, hard in enumerate((False, True, False), start=1):
+        if CUTOFF - time() < 42 * 60:
+            raise Stop("Weekly cutoff is too close for a new assignment.")
+        current_main()
+        params = {"handle": OWNER, "kind": "prove"}
+        if hard:
+            params["hard"] = "1"
+        print(f"Assignment request {attempt}/3, {'hard' if hard else 'all levels'}.")
+        status, data = request(DESK + "next", params)
+        if status != 200 or not isinstance(data, dict) or "gap" not in data:
+            raise Stop(f"Assignment unavailable (HTTP {status}).")
+        if data["gap"] is not None:
+            lease = data.get("lease")
+            lease_id = lease.get("id") if isinstance(lease, dict) else None
+            if not isinstance(lease_id, str) or not re.fullmatch(r"[A-Za-z0-9-]{1,64}", lease_id):
+                raise Stop("The desk supplied no usable lease identifier.")
+            return lease_id, data["gap"]
+        if not empty_queue(data):
+            print("Desk returned a restriction or unfamiliar status. No further requests.")
+            return None
+        if attempt < 3:
+            print("Waiting three minutes before requesting another assignment.")
+            sleep(180)
+    print("No available assignment after three spaced requests.")
+    return None
 
 
 def describe(gap):
@@ -244,10 +289,7 @@ def set_output(name):
 
 
 def acquire():
-    if CUTOFF - time() < 42 * 60:
-        raise Stop("Weekly cutoff is too close for a new assignment.")
     pinned = git("rev-parse", "HEAD").decode().strip()
-    current_main()
     assignment = assign()
     if assignment is None:
         return
