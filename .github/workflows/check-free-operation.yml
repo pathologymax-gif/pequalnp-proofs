@@ -1,0 +1,55 @@
+name: Verify free-operation circuit lower bounds
+
+on:
+  push:
+    branches: [research/meta-17121]
+    paths:
+      - '.github/workflows/check-free-operation.yml'
+      - 'research/meta-17121/free_operation.py'
+      - 'research/meta-17121/test_free_operation.py'
+      - 'research/meta-17121/exact_synthesis.py'
+      - 'research/meta-17121/seed_tables.json'
+      - 'research/meta-17121/solver-requirements.txt'
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    if: github.repository == 'pathologymax-gif/pequalnp-proofs'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          persist-credentials: false
+      - name: Check out the independent DRAT verifier
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          repository: marijnheule/drat-trim
+          ref: 2e3b2dc0ecf938addbd779d42877b6ed69d9a985
+          path: proof-checker
+          persist-credentials: false
+      - name: Compile the verifier and install pinned solver wheels
+        working-directory: research/meta-17121
+        run: |
+          gcc -O2 "$GITHUB_WORKSPACE/proof-checker/drat-trim.c" -o "$RUNNER_TEMP/drat-trim"
+          /usr/bin/python3.12 -m venv "$RUNNER_TEMP/sat"
+          "$RUNNER_TEMP/sat/bin/python" -m pip install --only-binary=:all: --require-hashes -r solver-requirements.txt
+      - name: Compare the SAT translation with exhaustive enumeration on small tables
+        working-directory: research/meta-17121
+        run: '"$RUNNER_TEMP/sat/bin/python" -m unittest -v test_free_operation'
+      - name: Generate and independently verify all eight certificates in sequence
+        working-directory: research/meta-17121
+        run: |
+          "$RUNNER_TEMP/sat/bin/python" rectangles_with_errors.py
+          for kind in and or; do
+            if [ "$kind" = and ]; then count=5; else count=6; fi
+            for case_id in 0 1 2 3; do
+              prefix="$RUNNER_TEMP/case-$case_id-$kind-$count"
+              "$RUNNER_TEMP/sat/bin/python" -u free_operation.py "$case_id" "$kind" "$count" --conflicts 2400000 --proof "$prefix.drat" --output "$prefix.json"
+              "$RUNNER_TEMP/drat-trim" "$prefix.cnf" "$prefix.drat" > "$prefix.log"
+              tr '\r' '\n' < "$prefix.log" | grep '^s VERIFIED'
+              sha256sum "$prefix.cnf" "$prefix.drat"
+            done
+          done
