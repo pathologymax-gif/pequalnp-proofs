@@ -67,8 +67,16 @@ theorem verifies_eleven : verifies 11 = true := by decide +kernel
 set_option maxHeartbeats 0 in
 theorem verifies_thirteen : verifies 13 = true := by decide +kernel
 
+def offsetPair (p a d : Nat) : Nat × Nat := (a, (a+d) % p)
+
+set_option maxHeartbeats 0 in
+theorem gaps_one_two_four_mod_seventeen :
+    ∀ a b : Fin 17, excluded 17 (offsetPair 17 a.val 2) (offsetPair 17 b.val 4) := by
+  decide +kernel
+
 #print axioms exclusion_of_check
 #print axioms verifies_eleven
 #print axioms verifies_thirteen
+#print axioms gaps_one_two_four_mod_seventeen
 
 end CubeResidueCertificate

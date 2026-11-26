@@ -71,3 +71,9 @@ python verify_cube_residues.py 11 13 17 19 23 29 31 37 41 43 47 53 59 61 67 71 7
 ```
 
 An integer tuple may occupy at most ten residue classes for every prime on this list. The calculation leaves those tuples unresolved. A proof that infinitely many primes always exclude every configuration having at least eleven distinct nodes would settle the general case, since any given nonzero difference of exponents has only finitely many prime divisors.
+
+## A test using the gaps alone
+
+The same cubic discriminants also yield a different sufficient condition, even when several support residues coincide. Suppose the three input exponent differences reduce modulo 17, up to permutation and independent sign changes, to \(k,2k,4k\) for some nonzero \(k\). Then every positive root has multiplicity at most nine, whatever the three starting exponents are.
+
+Reverse the endpoints of any block whose sign needs changing. An affine change of input exponents over the field now takes the first block to \((0,1)\). The other two have the form \((a,a+2),(b,b+4)\) modulo 17. Of the 289 possible choices of \((a,b)\), 70 make the first cubic discriminant zero. None makes all three zero. The theorem `gaps_one_two_four_mod_seventeen` in the accompanying Lean file states this last exclusion directly for every pair of offsets. There is no condition on node collisions or on how large the original integer gaps are. For example, the criterion simultaneously covers gap triples \((1,2,4)\), \((18,36,55)\), and \((1,19,174)\).
