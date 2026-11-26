@@ -36,7 +36,7 @@ Follow the two paths out of $r$ to their first common gate $M$. Such a gate exis
 
 ## Finite checks and formal scope
 
-Each row counts labeled simple graphs with no isolated vertices. Two enumerations checked the first two gate budgets through six inputs. One enumerates read-once formulas and circuits with one shared wire using truth tables. The other enumerates circuit topologies. A separate gate-by-gate search cross-checks the counts through four inputs. The 1,860 labeled six-vertex graphs of minimum size six fall into ten isomorphism classes.
+Each row counts labeled simple graphs with no isolated vertices. Two enumerations checked the first two gate budgets through six inputs. One enumerates read-once formulas and circuits with one shared wire using truth tables. The other enumerates circuit topologies and extends the calculation to seven and eight inputs. The topology search compares complete truth tables and reconstructs all labeled realizable graphs from their isomorphism classes. A separate gate-by-gate search cross-checks the counts through four inputs. The 1,860 labeled six-vertex graphs of minimum size six fall into ten isomorphism classes.
 
 | Inputs | Eligible graphs | Minimum $n-1$ | Minimum $n$ |
 |---:|---:|---:|---:|
@@ -45,8 +45,10 @@ Each row counts labeled simple graphs with no isolated vertices. Two enumeration
 | 4 | 41 | 10 | 12 |
 | 5 | 768 | 45 | 180 |
 | 6 | 27,449 | 241 | 1,860 |
+| 7 | 1,887,284 | 1,428 | 17,640 |
+| 8 | 252,522,481 | 9,325 | 169,092 |
 
-The accompanying Lean theorem formalizes the read-once structural step. In `EdgeShape.lean`, `EdgeShape.Formula.minimal_two_iff_bicliqueUnion` proves that every inclusion-minimal satisfying Boolean assignment has exactly two true inputs if and only if the read-once formula has the syntax of a disjoint union of bicliques. Lean 4.37.0-rc1 checked this theorem using only `propext`, `Classical.choice`, and `Quot.sound`. The general circuit reduction and the classification at size $n$ are proved above on paper.
+The accompanying Lean theorem formalizes the read-once structural step. In `EdgeShape.lean`, `EdgeShape.Formula.minimal_two_iff_bicliqueUnion` proves that every inclusion-minimal satisfying Boolean assignment has exactly two true inputs if and only if the read-once formula has the syntax of a disjoint union of bicliques. Lean 4.37.0-rc1 checked this theorem using only `propext`, `Classical.choice`, and `Quot.sound`. A second standalone formalization, [OneWire.lean](OneWire.lean), proves the one-wire criterion when an edge crosses the cut. It also covers a signal that encodes the inside disjunction with opposite polarity. The complete circuit reduction and the classification at size $n$ are proved above on paper.
 
 ## Relation to earlier work
 

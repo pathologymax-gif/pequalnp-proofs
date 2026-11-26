@@ -12,10 +12,11 @@ or to a completed gate, yielding n distinct inputs. Plane orientations suffice:
 at the branching point between uses, visit the defining occurrence first.
 
 Run with Python 3.10 or later. The default checks n = 2 through 6.
+Pass --max-n 8 to extend the exhaustive enumeration through eight vertices.
 """
 
 from argparse import ArgumentParser
-from functools import cache
+from functools import cache, lru_cache
 from itertools import combinations, permutations
 
 
@@ -72,27 +73,35 @@ def binary_topologies(n, gate_count):
             yield [(wire(left), wire(right)) for left, right, _ in gates]
 
 
-def truth_table_index(n, variables, edges):
-    """Bit j of a truth table is its value on the assignment encoded by j."""
-    functions = [0] * (1 << len(edges))
-    used = [0] * len(functions)
-    index = {}
-    for graph in range(1, len(functions)):
-        bit = graph & -graph
-        other = graph ^ bit
-        u, v = edges[bit.bit_length() - 1]
-        functions[graph] = functions[other] | (variables[u] & variables[v])
-        used[graph] = used[other] | (1 << u) | (1 << v)
-        if used[graph] == (1 << n) - 1:
-            index[functions[graph]] = graph
-    return index
+def graph_recognizer(n, variables, edges):
+    """A graph is forced by the truth table values on two-element sets."""
+    samples = [1 << ((1 << u) | (1 << v)) for u, v in edges]
+    terms = [variables[u] & variables[v] for u, v in edges]
+    endpoints = [(1 << u) | (1 << v) for u, v in edges]
+    singleton_or_empty = 1 + sum(1 << (1 << i) for i in range(n))
+
+    @lru_cache(maxsize=12000)
+    def recognize(function):
+        if function & singleton_or_empty:
+            return None
+        graph = covered = reconstructed = 0
+        for k, sample in enumerate(samples):
+            if function & sample:
+                graph |= 1 << k
+                covered |= endpoints[k]
+                reconstructed |= terms[k]
+        if reconstructed == function and covered == (1 << n) - 1:
+            return graph
+        return None
+
+    return recognize
 
 
 def count(n):
     variables = [sum(1 << assignment for assignment in range(1 << n)
                      if assignment & (1 << v)) for v in range(n)]
     edges = list(combinations(range(n), 2))
-    matching = truth_table_index(n, variables, edges)
+    recognize = graph_recognizer(n, variables, edges)
     edge_bits = {edge: 1 << index for index, edge in enumerate(edges)}
     relabelings = [[edge_bits[tuple(sorted((p[u], p[v])))] for u, v in edges]
                    for p in permutations(range(n))]
@@ -107,7 +116,7 @@ def count(n):
                 for k, (u, v) in enumerate(topology):
                     a, b = values[u], values[v]
                     values.append((a & b) if ops & (1 << k) else (a | b))
-                graph = matching.get(values[-1])
+                graph = recognize(values[-1])
                 if graph is None or graph in labeled:
                     continue
                 classes += 1
@@ -124,17 +133,19 @@ EXPECTED = {
     4: [(10, 3), (22, 4)],
     5: [(45, 3), (225, 6)],
     6: [(241, 7), (2101, 17)],
+    7: [(1428, 8), (19068, 31)],
+    8: [(9325, 16), (178417, 69)],
 }
 
 
 if __name__ == "__main__":
     parser = ArgumentParser(description=__doc__)
-    parser.add_argument("--max-n", type=int, choices=range(2, 7), default=6)
+    parser.add_argument("--max-n", type=int, choices=range(2, 9), default=6)
     args = parser.parse_args()
     print("n  labeled<=n-1  labeled<=n  labeled=n  unlabeled<=n-1  unlabeled<=n")
     for n in range(2, args.max_n + 1):
         result = count(n)
-        if result != EXPECTED[n]:
+        if n in EXPECTED and result != EXPECTED[n]:
             raise ValueError(f"unexpected count for {n}: {result}")
         (tight, iso_tight), (extra, iso_extra) = result
         print(n, tight, extra, extra - tight, iso_tight, iso_extra, sep="  ")
