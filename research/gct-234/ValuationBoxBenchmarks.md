@@ -14,22 +14,22 @@ Each measurement is a single `#time` reading with `Elab.async false` in the Lean
 
 Each of the ten replacement arithmetic proofs checked in the same environment and produced the same three standard axioms. The mixed tables retain the original tactic for cases outside the six equations.
 
-| Table | Shared lookup time in seconds |
-| --- | ---: |
-| `001110` | 31.737 |
-| `001111` | 17.191 |
-| `001112` | 13.994 |
-| `011110` | 57.341 |
-| `011111` | 30.830 |
-| `011112` | 26.913 |
-| `101100` | 49.748 |
-| `121110` | 101.251 |
-| `121111` | 73.061 |
-| `121112` | 75.278 |
+| Table | Original seconds | Shared lookup seconds |
+| --- | ---: | ---: |
+| `001110` | 74.200 | 31.737 |
+| `001111` | — | 17.191 |
+| `001112` | — | 13.994 |
+| `011110` | 136.619 | 57.341 |
+| `011111` | — | 30.830 |
+| `011112` | — | 26.913 |
+| `101100` | — | 49.748 |
+| `121110` | 206.103 | 101.251 |
+| `121111` | 132.483 | 73.061 |
+| `121112` | 118.137 | 75.278 |
 
 The reconstructed-mask proof checked `001111` in 15.418 seconds and `011110` in 62.659 seconds.
 
-The original mixed-table proof for `011110` checked in 136.619 seconds. Across the two paired comparisons for `001110` and `011110`, the original proofs used a combined 210.819 seconds. The shared lookup proofs used 89.078 seconds, a reduction of 121.741 seconds in the observed runs.
+Across the five paired comparisons, the original proofs used a combined 667.542 seconds. The shared lookup proofs used 338.668 seconds, a reduction of 328.874 seconds (49.3%) in the observed runs. The other five tables have no recorded original measurement in this experiment.
 
 The compact construction assigns each valuation expression one of three forms. A known unit has valuation zero. An index in the `ones` list has valuation one. Each remaining index whose first residue vanishes keeps its original integer variable. A kernel-checked conversion identifies the specialized equations with the original hypotheses at every index they reference. `omega` then proves the contradiction. Mixed tables preserve the original proof for cases that use sign information or other relations. Among 230 boxes in the twelve original tables, 160 use only the six linear equations.
 
@@ -39,7 +39,7 @@ Run the following commands from the directory containing the three Python script
 
 ```sh
 curl -fL https://raw.githubusercontent.com/williamzheng0711/pequalnp-proofs/623f0fcd3f27c6f292736e9949bf34727ae1ff07/lean/PEqualNP/Outside/L_gct_234.lean -o pr23279.lean
-python bench_boxes.py Original.lean --method original --rows 001110,011110
+python bench_boxes.py Original.lean --method original --rows 001110,011110,121110,121111,121112
 python bench_boxes.py Explicit.lean --method explicit --rows 001110
 python bench_boxes.py Lookup.lean --method lookup --rows 001110,001111,001112,011110,011111,011112,101100,121110,121111,121112
 python bench_boxes.py Reconstructed.lean --method reconstruct --rows 001110,011110
