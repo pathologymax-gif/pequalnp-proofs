@@ -1,0 +1,45 @@
+name: Check the 18-gate circuit search
+on:
+  push:
+    branches: [research/meta-17121]
+    paths:
+      - '.github/workflows/meta-synthesis.yml'
+      - 'research/meta-17121/exact_synthesis.py'
+      - 'research/meta-17121/run_synthesis.py'
+      - 'research/meta-17121/test_synthesis.py'
+      - 'research/meta-17121/seed_tables.json'
+      - 'research/meta-17121/star_upper.json'
+      - 'research/meta-17121/solver-requirements.txt'
+permissions:
+  contents: read
+concurrency:
+  group: meta-17121-exact-synthesis
+  cancel-in-progress: false
+jobs:
+  solve:
+    if: github.repository == 'pathologymax-gif/pequalnp-proofs'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 32
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          persist-credentials: false
+      - name: Install the pinned mathematical solver
+        working-directory: research/meta-17121
+        run: |
+          /usr/bin/python3.12 -m venv "$RUNNER_TEMP/sat"
+          "$RUNNER_TEMP/sat/bin/python" -m pip install --only-binary=:all: --require-hashes -r solver-requirements.txt
+      - name: Cross-check the encoding and all four known witnesses
+        working-directory: research/meta-17121
+        run: '"$RUNNER_TEMP/sat/bin/python" -m unittest -v test_synthesis'
+      - name: Search the four assigned truth tables
+        working-directory: research/meta-17121
+        run: '"$RUNNER_TEMP/sat/bin/python" -u run_synthesis.py --gates 18 --seconds 1500 --out solver-results'
+      - name: Publish the exact verdict or timed-search result
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: search-results
+          path: research/meta-17121/solver-results
+          if-no-files-found: warn
+          retention-days: 7
