@@ -1,0 +1,107 @@
+name: Check and submit independently verified finite proofs
+
+on:
+  push:
+    branches: [promise44-validation]
+    paths: [.github/workflows/promise44.yml]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: finite-proof-targets
+  cancel-in-progress: false
+
+jobs:
+  validate:
+    strategy:
+      fail-fast: false
+      matrix:
+        slot: [1, 2, 3]
+    if: github.repository == 'pathologymax-gif/pequalnp-proofs' && github.actor == 'pathologymax-gif' && !github.event.deleted
+    runs-on: ubuntu-24.04
+    # Setup, an optional independent preflight, queue retries, 150 live
+    # research minutes and sufficient time for final release and cleanup.
+    timeout-minutes: 240
+    env:
+      # Leave these empty for a normal assignment. Set both only for an
+      # existing independently checked proof, referencing its exact fork SHA.
+      PROOF_SLOT: ${{ matrix.slot }}
+      PNP_CHECKED_STEP: ""
+      PNP_CHECKED_COMMIT: ""
+    steps:
+      - name: Check the weekly time limit
+        run: test "$(date -u +%s)" -lt "$(date -ud '2026-12-02T03:22:45Z' +%s)"
+      - name: Check out the owner's session controller
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          path: session
+          persist-credentials: false
+      - name: Check out the upstream proof project
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          repository: open-goat/pequalnp-proofs
+          ref: main
+          path: upstream
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Prepare the pinned Lean toolchain before leasing
+        working-directory: upstream/lean
+        timeout-minutes: 26
+        run: |
+          set -euo pipefail
+          test ! -e ../STOP
+          test -f lake-manifest.json
+          test -f lean-toolchain
+          test -f ../tools/pnp.sh
+          command -v openssl
+          openssl pkey -pubin -in ../../session/.github/proof-session/receipt-public.pem -noout
+          sh ../.github/scripts/install-elan.sh v4.4.0 0e8250aa2be86c7af929ade68db617af9edc8b9ccf6eaf5ece228250d0d032e2 "$HOME/.elan" "$(cat lean-toolchain)"
+          export PATH="$HOME/.elan/bin:$PATH"
+          echo "$HOME/.elan/bin" >> "$GITHUB_PATH"
+          lake env lean --version
+          lake exe cache get || lake exe cache get
+          lake build checklemma +PEqualNP.Defs
+          git rev-parse HEAD
+          cat lean-toolchain
+      - name: Await target, certify it and request its proof-specific lease
+        id: acquire
+        working-directory: upstream
+        run: python3 -I -u ../session/.github/proof-session/promise-worker.py acquire
+      - name: Publish the assignment for the working agents
+        if: steps.acquire.outputs.assigned == 'true'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: proof-assignment-${{ matrix.slot }}
+          path: ${{ runner.temp }}/proof-session-assignment.json
+          retention-days: 1
+          if-no-files-found: error
+      - name: Check the candidate against the assigned statement
+        id: build
+        if: steps.acquire.outputs.assigned == 'true'
+        working-directory: upstream
+        run: python3 -I -u ../session/.github/proof-session/promise-worker.py build
+      - name: Publish the checked commit and encrypted receipt
+        if: steps.build.outputs.ready == 'true'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: proof-ready-${{ matrix.slot }}
+          path: ${{ runner.temp }}/proof-session-ready.json
+          retention-days: 1
+          if-no-files-found: error
+      - name: Reconfirm the lease and matching pull request
+        if: steps.build.outputs.ready == 'true'
+        working-directory: upstream
+        run: python3 -I -u ../session/.github/proof-session/promise-worker.py confirm
+      - name: Close any remaining assignment
+        if: always()
+        working-directory: upstream
+        run: python3 -I -u ../session/.github/proof-session/promise-worker.py cleanup
+      - name: Preserve the final checked revision if the branch changed
+        if: always() && steps.build.outputs.ready == 'true'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: proof-ready-final-${{ matrix.slot }}
+          path: ${{ runner.temp }}/proof-session-ready.json
+          retention-days: 1
+          if-no-files-found: error
